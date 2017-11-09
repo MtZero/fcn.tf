@@ -14,9 +14,13 @@ FLAGS = tf.flags.FLAGS
 tf.flags.DEFINE_integer("batch_size", "20", "batch size for training")
 tf.flags.DEFINE_string("logs_dir", "logs/", "path to logs directory")
 tf.flags.DEFINE_string("data_dir", "Data_zoo/MIT_SceneParsing/", "path to dataset")
-tf.flags.DEFINE_float("learning_rate", "1e-4", "Learning rate for Momentum Optimizer")tf.flags.DEFINE_bool('debug', "False", "Debug mode: True/ False")
+tf.flags.DEFINE_float("learning_rate", "1e-4", "Learning rate for Momentum Optimizer")
+tf.flags.DEFINE_bool('debug', "False", "Debug mode: True/ False")
 tf.flags.DEFINE_string('mode', "train", "Mode train/ test/ visualize")
 tf.flags.DEFINE_float("momentum", "0.9", "momentum for Momentum Optimizer")
+tf.flags.DEFINE_float("weight_decay", "5**(−4)", "weight_decay for reg_loss")
+
+
 
 def inference(self, image, keep_prob):
     """ fcn_8s """
@@ -80,6 +84,8 @@ def main(argv=None):
     if FLAGS.debug:
         for var in trainable_var:
             utils.add_to_regularization_and_summary(var)
+        reg_loss = tf.add_n(tf.get_collection("reg_loss"))
+        loss += FLAGS.weight_decay * reg_loss
     train_op = train(loss, trainable_var)
 
     print("Setting up summary op...")
