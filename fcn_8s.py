@@ -65,13 +65,4 @@ def train(loss_val, var_list):
     return optimizer.apply_gradients(grads)
     
 def main(argv=None):
-    keep_probability = tf.placeholder(tf.float32, name="keep_probabilty")
-    image = tf.placeholder(tf.float32, shape=[None, IMAGE_SIZE, IMAGE_SIZE, 3], name="input_image")
-    annotation = tf.placeholder(tf.int32, shape=[None, IMAGE_SIZE, IMAGE_SIZE, 1], name="annotation")
-
-    pred_annotation, logits = inference(image, keep_probability)
-    tf.image_summary("input_image", image, max_images=2)
-    tf.image_summary("ground_truth", tf.cast(annotation, tf.uint8), max_images=2)
-    tf.image_summary("pred_annotation", tf.cast(pred_annotation, tf.uint8), max_images=2)
-    loss = tf.reduce_mean((tf.nn.sparse_softmax_cross_entropy_with_logits(logits,
-    
+    pass
