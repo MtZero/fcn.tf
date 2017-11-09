@@ -10,7 +10,7 @@ from __future__ import print_function
 import tensorflow as tf
 
 
-class vgg16(object):
+class vgg16_model(object):
     """vgg16 model."""
 
     def __init__(self, is_training, data_format, batch_norm_decay, batch_norm_epsilon):
@@ -35,7 +35,7 @@ class vgg16(object):
         raise NotImplementedError(
             'forward_pass() is implemented in ResNet sub classes')
 
-    def _vgg16_modified(self, x, keep_prob, train=False):
+    def _vgg16_modified(self, x, keep_prob, is_training=False):
         with tf.name_scope('vgg16') as name_scope:
             orig_x = x
 
@@ -72,12 +72,12 @@ class vgg16(object):
 
             """ fc6 """
             self.fc6 = self._conv(self.pool5, 7, 4096, self._stride, 'fc6')
-            if train:
+            if is_training:
                 self.fc6 = tf.nn.dropout(self.fc6, keep_prob)
 
             """ fc7 """
             self.fc7 = self._conv(self.fc6, 1, 4096, self._stride, 'fc7')
-            if train:
+            if is_training:
                 self.fc7 = tf.nn.dropout(self.fc7, keep_prob)
 
             """ fc8 """
