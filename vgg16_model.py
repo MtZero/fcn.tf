@@ -43,7 +43,8 @@ class vgg16(object):
     # fc -> conv
     pass
 
-  def _vgg16_modified(self, x, stride):
+
+  def _vgg16_modified(self, x, stride, keep_prob, train=False):
     with tf.name_scope('vgg16') as name_scope:
       orig_x = x
 
@@ -78,7 +79,20 @@ class vgg16(object):
       self.conv5_3 = self._conv(self.conv5_2, self._kernel_size, 512, self._stride, 'conv5_3')
       self.pool5 = self._max_pool(self.conv5_3, self.pool_size, self.pool_stride, 'max_pool5')
 
-      return self.pool3, self.pool4, self.pool5
+      """ fc6 """
+      self.fc6 =  self._conv(self.pool5, 7, 4096, self._stride, 'fc6' )
+      if train:
+        self.fc6 = tf.nn.dropout(self.fc, keep_prob)
+
+      """ fc7 """
+      self.fc7 = self._conv(self.fc6, 1, 4096, self._stride, 'fc7')
+      if train:
+        self.fc7 = self._conv(self.fc7, keep_prob)
+
+      """ fc8 """
+      self.fc8 = self._conv(self.fc8, 1, 21, self._stride, 'fc8')
+
+      return self.pool3, self.pool4, self.pool5, self.fc8
 
 
   def _conv(self, x, kernel_size, filters, strides, name):
