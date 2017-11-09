@@ -35,15 +35,39 @@ class vgg16(object):
         raise NotImplementedError(
             'forward_pass() is implemented in ResNet sub classes')
 
-    def inference(image, keep_prob):
+    def inference(self, image, keep_prob):
         # load data
         pass
 
         # preprocess
         pass
 
-        # fc -> conv
-        pass
+        # deconvolution
+        with tf.variable_scope("inference"):
+            pool3, pool4, fc8 = self._vgg16_modified(image_input, 1, 0.5, True)
+            # upsample and add with pool4
+            deconv_shape1 = pool4.get_shape()
+            W_t1 = tf.Variable(initializer=tf.truncated_normal([4, 4, deconv_shape1[3].value, 21], 0.02), name="W_t1")
+            b_t1 = tf.Variable(initializer=tf.constant(0.0, shape=[deconv_shape1[3].value]), name="b_t1")
+            conv_t1 = self.conv2d_transpose_strided(fc8, W_t1, b_t1, output_shape=tf.shape(pool4))
+            fuse_1 = tf.add(conv_t1, pool4, name="fuse_1")
+
+            # upsample and add with pool5
+            deconv_shape2 = pool3.get_shape()
+            W_t2 = tf.Variable(initializer=tf.truncated_normal([4, 4, deconv_shape2[3].value, 21], 0.02), name="W_t2")
+            b_t2 = tf.Variable(initializer=tf.constant(0.0, shape=[deconv_shape2[3].value]), name="b_t2")
+            conv_t2 = self.conv2d_transpose_strided(fuse_1, W_t2, b_t2, output_shape=tf.shape(pool3))
+            fuse_2 = tf.add(conv_t2, pool3, name="fuse_2")
+
+            shape = tf.shape(image)
+            deconv_shape3 = tf.stack([shape[0], shape[1], shape[2], 21])
+            W_t3 = tf.Variable(initializer=tf.truncated_normal([16, 16, 21, deconv_shape2[3].value], 0.02), name="W_t3")
+            b_t3 = tf.Variable(initializer=tf.constant(0.0, shape=[21]), name="b_t3")
+            conv_t3 = self.conv2d_transpose_strided(fuse_2, W_t3, b_t3, output_shape=deconv_shape3, stride=8)
+
+            prediction = tf.argmax(conv_t3, dimension=3, name="prediction")
+
+        return tf.expand_dims(prediction, dim=3), conv_t3
 
     def _vgg16_modified(self, x, stride, keep_prob, train=False):
         with tf.name_scope('vgg16') as name_scope:
@@ -83,17 +107,17 @@ class vgg16(object):
             """ fc6 """
             self.fc6 = self._conv(self.pool5, 7, 4096, self._stride, 'fc6')
             if train:
-                self.fc6 = tf.nn.dropout(self.fc, keep_prob)
+                self.fc6 = tf.nn.dropout(self.fc6, keep_prob)
 
             """ fc7 """
             self.fc7 = self._conv(self.fc6, 1, 4096, self._stride, 'fc7')
             if train:
-                self.fc7 = self._conv(self.fc7, keep_prob)
+                self.fc7 = tf.nn.dropout(self.fc7, keep_prob)
 
             """ fc8 """
             self.fc8 = self._conv(self.fc8, 1, 21, self._stride, 'fc8')
 
-            return self.pool3, self.pool4, self.pool5, self.fc8
+            return self.pool3, self.pool4, self.fc8
 
     def _conv(self, x, kernel_size, filters, strides, name):
         """Convolution."""
@@ -161,3 +185,12 @@ class vgg16(object):
 
         tf.logging.info('image after unit %s: %s', name_scope, x.get_shape())
         return x
+
+    def conv2d_transpose_strided(self, x, W, b, output_shape=None, stride=2):
+        if output_shape is None:
+            output_shape = x.get_shape().as_list()
+            output_shape[1] *= 2
+            output_shape[2] *= 2
+            output_shape[3] = W.get_shape().as_list()[2]
+        conv = tf.nn.conv2d_transpose(x, W, output_shape, strides=[1, stride, stride, 1], padding="SAME")
+        return tf.nn.bias_add(conv, b)
