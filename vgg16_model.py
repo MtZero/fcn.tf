@@ -9,142 +9,142 @@ from __future__ import print_function
 
 import tensorflow as tf
 
+
 class vgg16(object):
-  """vgg16 model."""
-  def __init__(self, is_training, data_format, batch_norm_decay, batch_norm_epsilon):
-    """vgg16 constructor.
+    """vgg16 model."""
 
-    Args:
-      is_training: if build training or inference model.
-      data_format: the data_format used during computation.
-                   one of 'channels_first' or 'channels_last'.
-    """
-    self._batch_norm_decay = batch_norm_decay
-    self._batch_norm_epsilon = batch_norm_epsilon
-    self._is_training = is_training
-    assert data_format in ('channels_first', 'channels_last')
-    self._data_format = data_format
-    self._kernel_size = 3
-    self._stride = 1
-    self.pool_size = 3
-    self.pool_stride = 2
+    def __init__(self, is_training, data_format, batch_norm_decay, batch_norm_epsilon):
+        """vgg16 constructor.
 
-  def forward_pass(self, x):
-    raise NotImplementedError(
-        'forward_pass() is implemented in ResNet sub classes')
+        Args:
+          is_training: if build training or inference model.
+          data_format: the data_format used during computation.
+                       one of 'channels_first' or 'channels_last'.
+        """
+        self._batch_norm_decay = batch_norm_decay
+        self._batch_norm_epsilon = batch_norm_epsilon
+        self._is_training = is_training
+        assert data_format in ('channels_first', 'channels_last')
+        self._data_format = data_format
+        self._kernel_size = 3
+        self._stride = 1
+        self.pool_size = 3
+        self.pool_stride = 2
 
-  def inference(image, keep_prob):
-    # load data
-    pass
+    def forward_pass(self, x):
+        raise NotImplementedError(
+            'forward_pass() is implemented in ResNet sub classes')
 
-    # preprocess
-    pass
-    
-    # fc -> conv
-    pass
+    def inference(image, keep_prob):
+        # load data
+        pass
 
-  def _vgg16_modified(self, x, stride):
-    with tf.name_scope('vgg16') as name_scope:
-      orig_x = x
+        # preprocess
+        pass
 
-      x = self._batch_norm(x)
-      x = self._relu(x)
+        # fc -> conv
+        pass
 
-      """ conv_1 """
-      self.conv1_1 = self._conv(x, self._kernel_size, 64, self._stride, 'conv1_1')
-      self.conv1_2 = self._conv(self.conv1_1, self._kernel_size, 64, self._stride, 'conv1_2')
-      self.pool1 = self._max_pool(self.conv1_2, self.pool_size, self.pool_stride, 'max_pool1')
-      
-      """ conv_2 """
-      self.conv2_1 = self._conv(self.pool1, self._kernel_size, 128, self._stride, 'conv2_1')
-      self.conv2_2 = self._conv(self.conv2_1, self._kernel_size, 128, self._stride, 'conv2_2')
-      self.pool2 = self._max_pool(self.conv2_2, self.pool_size, self.pool_stride, 'max_pool2')
+    def _vgg16_modified(self, x, stride):
+        with tf.name_scope('vgg16') as name_scope:
+            orig_x = x
 
-      """ conv_3 """
-      self.conv3_1 = self._conv(self.pool2, self._kernel_size, 256, self._stride, 'conv3_1')
-      self.conv3_2 = self._conv(self.conv3_1, self._kernel_size, 256, self._stride, 'conv3_2')
-      self.conv3_3 = self._conv(self.conv3_2, self._kernel_size, 256, self._stride, 'conv3_3')
-      self.pool3 = self._max_pool(self.conv3_3, self.pool_size, self.pool_stride, 'max_pool3')
+            x = self._batch_norm(x)
+            x = self._relu(x)
 
-      """ conv_4 """
-      self.conv4_1 = self._conv(self.pool3, self._kernel_size, 512, self._stride, 'conv4_1')
-      self.conv4_2 = self._conv(self.conv4_1, self._kernel_size, 512, self._stride, 'conv4_2')
-      self.conv4_3 = self._conv(self.conv4_2, self._kernel_size, 512, self._stride, 'conv4_3')
-      self.pool4 = self._max_pool(self.conv4_3, self.pool_size, self.pool_stride, 'max_pool4')
+            """ conv_1 """
+            self.conv1_1 = self._conv(x, self._kernel_size, 64, self._stride, 'conv1_1')
+            self.conv1_2 = self._conv(self.conv1_1, self._kernel_size, 64, self._stride, 'conv1_2')
+            self.pool1 = self._max_pool(self.conv1_2, self.pool_size, self.pool_stride, 'max_pool1')
 
-      """ conv_5 """
-      self.conv5_1 = self._conv(self.pool4, self._kernel_size, 512, self._stride, 'conv5_1')
-      self.conv5_2 = self._conv(self.conv5_1, self._kernel_size, 512, self._stride, 'conv5_2')
-      self.conv5_3 = self._conv(self.conv5_2, self._kernel_size, 512, self._stride, 'conv5_3')
-      self.pool5 = self._max_pool(self.conv5_3, self.pool_size, self.pool_stride, 'max_pool5')
+            """ conv_2 """
+            self.conv2_1 = self._conv(self.pool1, self._kernel_size, 128, self._stride, 'conv2_1')
+            self.conv2_2 = self._conv(self.conv2_1, self._kernel_size, 128, self._stride, 'conv2_2')
+            self.pool2 = self._max_pool(self.conv2_2, self.pool_size, self.pool_stride, 'max_pool2')
 
-      return self.pool3, self.pool4, self.pool5
+            """ conv_3 """
+            self.conv3_1 = self._conv(self.pool2, self._kernel_size, 256, self._stride, 'conv3_1')
+            self.conv3_2 = self._conv(self.conv3_1, self._kernel_size, 256, self._stride, 'conv3_2')
+            self.conv3_3 = self._conv(self.conv3_2, self._kernel_size, 256, self._stride, 'conv3_3')
+            self.pool3 = self._max_pool(self.conv3_3, self.pool_size, self.pool_stride, 'max_pool3')
 
+            """ conv_4 """
+            self.conv4_1 = self._conv(self.pool3, self._kernel_size, 512, self._stride, 'conv4_1')
+            self.conv4_2 = self._conv(self.conv4_1, self._kernel_size, 512, self._stride, 'conv4_2')
+            self.conv4_3 = self._conv(self.conv4_2, self._kernel_size, 512, self._stride, 'conv4_3')
+            self.pool4 = self._max_pool(self.conv4_3, self.pool_size, self.pool_stride, 'max_pool4')
 
-  def _conv(self, x, kernel_size, filters, strides, name):
-    """Convolution."""
-    with tf.variable_scope(name) as scope:
-      padding = 'SAME'
-      pad = kernel_size - 1
-      pad_beg = pad // 2
-      pad_end = pad - pad_beg
-      if self._data_format == 'channels_first':
-        x = tf.pad(x, [[0, 0], [0, 0], [pad_beg, pad_end], [pad_beg, pad_end]])
-      else:
-        x = tf.pad(x, [[0, 0], [pad_beg, pad_end], [pad_beg, pad_end], [0, 0]])
-      x = tf.layers.conv2d(
-          inputs=x,
-          kernel_size=kernel_size,
-          filters=filters,
-          strides=strides,
-          padding=padding,
-          use_bias=False,
-          data_format=self._data_format)
+            """ conv_5 """
+            self.conv5_1 = self._conv(self.pool4, self._kernel_size, 512, self._stride, 'conv5_1')
+            self.conv5_2 = self._conv(self.conv5_1, self._kernel_size, 512, self._stride, 'conv5_2')
+            self.conv5_3 = self._conv(self.conv5_2, self._kernel_size, 512, self._stride, 'conv5_3')
+            self.pool5 = self._max_pool(self.conv5_3, self.pool_size, self.pool_stride, 'max_pool5')
 
-      bn = self._batch_norm(x)
-      relu = self._relu(bn)
-      # Add summary to Tensorboard
-      _activation_summary(relu)
-      return relu
+            return self.pool3, self.pool4, self.pool5
 
+    def _conv(self, x, kernel_size, filters, strides, name):
+        """Convolution."""
+        with tf.variable_scope(name) as scope:
+            padding = 'SAME'
+            pad = kernel_size - 1
+            pad_beg = pad // 2
+            pad_end = pad - pad_beg
+            if self._data_format == 'channels_first':
+                x = tf.pad(x, [[0, 0], [0, 0], [pad_beg, pad_end], [pad_beg, pad_end]])
+            else:
+                x = tf.pad(x, [[0, 0], [pad_beg, pad_end], [pad_beg, pad_end], [0, 0]])
+            x = tf.layers.conv2d(
+                inputs=x,
+                kernel_size=kernel_size,
+                filters=filters,
+                strides=strides,
+                padding=padding,
+                use_bias=False,
+                data_format=self._data_format)
 
-  def _batch_norm(self, x):
-    if self._data_format == 'channels_first':
-      data_format = 'NCHW'
-    else:
-      data_format = 'NHWC'
-    return tf.contrib.layers.batch_norm(
-        x,
-        decay=self._batch_norm_decay,
-        center=True,
-        scale=True,
-        epsilon=self._batch_norm_epsilon,
-        is_training=self._is_training,
-        fused=True,
-        data_format=data_format)
+            bn = self._batch_norm(x)
+            relu = self._relu(bn)
+            # Add summary to Tensorboard
+            _activation_summary(relu)
+            return relu
 
-  def _relu(self, x):
-    return tf.nn.relu(x)
+    def _batch_norm(self, x):
+        if self._data_format == 'channels_first':
+            data_format = 'NCHW'
+        else:
+            data_format = 'NHWC'
+        return tf.contrib.layers.batch_norm(
+            x,
+            decay=self._batch_norm_decay,
+            center=True,
+            scale=True,
+            epsilon=self._batch_norm_epsilon,
+            is_training=self._is_training,
+            fused=True,
+            data_format=data_format)
 
-  def _fully_connected(self, x, out_dim):
-    with tf.name_scope('fully_connected') as name_scope:
-      x = tf.layers.dense(x, out_dim)
+    def _relu(self, x):
+        return tf.nn.relu(x)
 
-    tf.logging.info('image after unit %s: %s', name_scope, x.get_shape())
-    return x
+    def _fully_connected(self, x, out_dim):
+        with tf.name_scope('fully_connected') as name_scope:
+            x = tf.layers.dense(x, out_dim)
 
-  def _avg_pool(self, x, pool_size, stride):
-    with tf.name_scope('avg_pool') as name_scope:
-      x = tf.layers.average_pooling2d(
-          x, pool_size, stride, 'SAME', data_format=self._data_format)
+        tf.logging.info('image after unit %s: %s', name_scope, x.get_shape())
+        return x
 
-    tf.logging.info('image after unit %s: %s', name_scope, x.get_shape())
-    return x
+    def _avg_pool(self, x, pool_size, stride):
+        with tf.name_scope('avg_pool') as name_scope:
+            x = tf.layers.average_pooling2d(
+                x, pool_size, stride, 'SAME', data_format=self._data_format)
 
-  def _max_pool(self, x, pool_size, stride, name):
-    with tf.name_scope(name) as name_scope:
-      x = tf.layers.max_pooling2d(
-          x, pool_size, stride, 'SAME', data_format=self._data_format)
+        tf.logging.info('image after unit %s: %s', name_scope, x.get_shape())
+        return x
 
-    tf.logging.info('image after unit %s: %s', name_scope, x.get_shape())
-    return x
+    def _max_pool(self, x, pool_size, stride, name):
+        with tf.name_scope(name) as name_scope:
+            x = tf.layers.max_pooling2d(
+                x, pool_size, stride, 'SAME', data_format=self._data_format)
+
+        tf.logging.info('image after unit %s: %s', name_scope, x.get_shape())
+        return x
