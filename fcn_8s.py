@@ -5,6 +5,19 @@ from __future__ import print_function
 import tensorflow as tf
 
 import vgg16 as vgg16
+import TensorflowUtils as utils
+import read_MITSceneParsingData as scene_parsing
+import datetime
+import BatchDatsetReader as dataset
+
+FLAGS = tf.flags.FLAGS
+tf.flags.DEFINE_integer("batch_size", "2", "batch size for training")
+tf.flags.DEFINE_string("logs_dir", "logs/", "path to logs directory")
+tf.flags.DEFINE_string("data_dir", "Data_zoo/MIT_SceneParsing/", "path to dataset")
+tf.flags.DEFINE_float("learning_rate", "1e-4", "Learning rate for Adam Optimizer")
+tf.flags.DEFINE_string("model_dir", "Model_zoo/", "Path to vgg model mat")
+tf.flags.DEFINE_bool('debug', "False", "Debug mode: True/ False")
+tf.flags.DEFINE_string('mode', "train", "Mode train/ test/ visualize")
 
 
 def inference(self, image, keep_prob):
@@ -17,7 +30,7 @@ def inference(self, image, keep_prob):
 
     # deconvolution
     with tf.variable_scope("inference"):
-        pool3, pool4, fc8 = vgg16._vgg16_modified(image_input, 1, 0.5, True)
+        pool3, pool4, fc8 = vgg16._vgg16_modified(image_input, 1, keep_prob, True)
         # upsample and add with pool4
         deconv_shape1 = pool4.get_shape()
         W_t1 = tf.Variable(initializer=tf.truncated_normal([4, 4, deconv_shape1[3].value, 21], 0.02), name="W_t1")
@@ -43,7 +56,13 @@ def inference(self, image, keep_prob):
     return tf.expand_dims(prediction, dim=3), conv_t3
 
 def train(loss_val, var_list):
-    pass
+    optimizer = tf.train.AdamOptimizer(FLAGS.learning_rate)
+    grads = optimizer.compute_gradients(loss_val, var_list=var_list)
+    if FLAGS.debug:
+        # print(len(var_list))
+        for grad, var in grads:
+            utils.add_gradient_summary(grad, var)
+    return optimizer.apply_gradients(grads)
     
 def main(argv=None):
     pass
