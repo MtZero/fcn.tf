@@ -35,7 +35,7 @@ class vgg16(object):
         raise NotImplementedError(
             'forward_pass() is implemented in ResNet sub classes')
 
-    def _vgg16_modified(self, x, stride, keep_prob, train=False):
+    def _vgg16_modified(self, x, keep_prob, train=False):
         with tf.name_scope('vgg16') as name_scope:
             orig_x = x
 
