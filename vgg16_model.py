@@ -59,7 +59,7 @@ class vgg16(object):
             conv_t2 = self.conv2d_transpose_strided(fuse_1, W_t2, b_t2, output_shape=tf.shape(pool3))
             fuse_2 = tf.add(conv_t2, pool3, name="fuse_2")
 
-            shape = tf.shape(image)
+            shape = tf.shape(image_input)
             deconv_shape3 = tf.stack([shape[0], shape[1], shape[2], 21])
             W_t3 = tf.Variable(initializer=tf.truncated_normal([16, 16, 21, deconv_shape2[3].value], 0.02), name="W_t3")
             b_t3 = tf.Variable(initializer=tf.constant(0.0, shape=[21]), name="b_t3")
