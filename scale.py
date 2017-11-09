@@ -6,7 +6,7 @@ def scale(input_img, size):
     input_pixels = input_img.load()
     # load width and height of output_img and input_img
     in_x, in_y = input_img.size
-    out_x, out_y = int(size[0]), int(size[1])
+    out_x, out_y = map(int, size)
     # creat a output_img
     output_img = Image.new('L', (out_x, out_y))
     output_pixels = output_img.load()
