@@ -21,7 +21,7 @@ tf.flags.DEFINE_bool('debug', "False", "Debug mode: True/ False")
 tf.flags.DEFINE_string("model_dir", "Model_zoo/", "Path to vgg model mat")
 tf.flags.DEFINE_string('mode', "train", "Mode train/ test/ visualize")
 tf.flags.DEFINE_float("momentum", "0.9", "momentum for Momentum Optimizer")
-tf.flags.DEFINE_float("weight_decay", "5**(−4)", "weight_decay for reg_loss")
+tf.flags.DEFINE_float("weight_decay", "5e-4", "weight_decay for reg_loss")
 
 MAX_ITERATION = int(1e5 + 1)
 IMAGE_SIZE = 500
@@ -29,7 +29,7 @@ IMAGE_SIZE = 500
 MODEL_URL = "http://www.vlfeat.org/matconvnet/models/beta16/imagenet-vgg-verydeep-16.mat"
 
 
-def inference(self, image, keep_prob):
+def inference(image, keep_prob):
     """ fcn_8s """
     # load data
     vgg16_object= vgg16()
@@ -51,46 +51,46 @@ def inference(self, image, keep_prob):
         conv_final_layer = image_net["conv5_3"]
 
         """ pool5 """
-        pool5 = vgg16_object._max_pool(self, conv_final_layer, 2, 2, 'pool5')
+        pool5 = vgg16_object._max_pool(conv_final_layer, 2, 2, 'pool5')
 
         """ fc6 """
         W6 = utils.weight_variable([7, 7, 512, 4096], name="W6")
         b6 = utils.bias_variable([4096], name="b6")
-        fc6 = vgg16_object._conv(self, pool5, W6, b6, 'fc6')
-        relu6 = vgg16_object._relu(self, fc6, 'relu6')
+        fc6 = vgg16_object._conv(pool5, W6, b6, 'fc6')
+        relu6 = vgg16_object._relu(fc6, 'relu6')
         fc6 = tf.nn.dropout(relu6, keep_prob)
 
         """ fc7 """
         W7 = utils.weight_variable([1, 1, 4096, 4096], name="W7")
         b7 = utils.bias_variable([4096], name="b7")
-        fc7 = vgg16_object._conv(self, fc6, W7, b7, 'fc7')
-        relu7 = vgg16_object._relu(self, fc7, 'relu7')
+        fc7 = vgg16_object._conv(fc6, W7, b7, 'fc7')
+        relu7 = vgg16_object._relu(fc7, 'relu7')
         fc7 = tf.nn.dropout(relu7, keep_prob)
 
         """ fc8 """
         W8 = utils.weight_variable([1, 1, 4096, 21], name="W8")
         b8 = utils.bias_variable([21], name="b8")
-        fc8 = vgg16_object._conv(self, fc7, W8, b8, 'fc8')
+        fc8 = vgg16_object._conv(fc7, W8, b8, 'fc8')
 
         # upsample and add with pool4
         deconv_shape1 = pool4.get_shape()
         W_t1 = tf.Variable(initial_value=tf.truncated_normal([4, 4, deconv_shape1[3].value, 21], 0.02), name="W_t1")
         b_t1 = tf.Variable(initial_value=tf.constant(0.0, shape=[deconv_shape1[3].value]), name="b_t1")
-        conv_t1 = vgg16_object.conv2d_transpose_strided(self, fc8, W_t1, b_t1, output_shape=tf.shape(pool4))
+        conv_t1 = vgg16_object.conv2d_transpose_strided(fc8, W_t1, b_t1, output_shape=tf.shape(pool4))
         fuse_1 = tf.add(conv_t1, pool4, name="fuse_1")
 
         # upsample and add with pool5
         deconv_shape2 = pool3.get_shape()
         W_t2 = tf.Variable(initial_value=tf.truncated_normal([4, 4, deconv_shape2[3].value, deconv_shape1[3].value], 0.02), name="W_t2")
         b_t2 = tf.Variable(initial_value=tf.constant(0.0, shape=[deconv_shape2[3].value]), name="b_t2")
-        conv_t2 = vgg16_object.conv2d_transpose_strided(self, fuse_1, W_t2, b_t2, output_shape=tf.shape(pool3))
+        conv_t2 = vgg16_object.conv2d_transpose_strided(fuse_1, W_t2, b_t2, output_shape=tf.shape(pool3))
         fuse_2 = tf.add(conv_t2, pool3, name="fuse_2")
 
         shape = tf.shape(processed_image)
         deconv_shape3 = tf.stack([shape[0], shape[1], shape[2], 21])
         W_t3 = tf.Variable(initial_value=tf.truncated_normal([16, 16, 21, deconv_shape2[3].value], 0.02), name="W_t3")
         b_t3 = tf.Variable(initial_value=tf.constant(0.0, shape=[21]), name="b_t3")
-        conv_t3 = vgg16_object.conv2d_transpose_strided(self, fuse_2, W_t3, b_t3, output_shape=deconv_shape3, stride=8)
+        conv_t3 = vgg16_object.conv2d_transpose_strided(fuse_2, W_t3, b_t3, output_shape=deconv_shape3, stride=8)
 
         prediction = tf.argmax(conv_t3, dimension=3, name="prediction")
 
@@ -117,9 +117,7 @@ def main(argv=None):
     tf.summary.image("input_image", image, max_outputs=20)
     tf.summary.image("ground_truth", tf.cast(annotation, tf.uint8), max_outputs=20)
     tf.summary.image("pred_annotation", tf.cast(pred_annotation, tf.uint8), max_outputs=20)
-    loss = tf.reduce_mean((tf.nn.sparse_softmax_cross_entropy_with_logits(logits,
-                                                                          tf.squeeze(annotation, squeeze_dims=[3]),
-                                                                          name="entropy")))
+    loss = tf.reduce_mean((tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=tf.squeeze(annotation, squeeze_dims=[3]))))
     tf.summary.scalar("entropy", loss)
 
     trainable_var = tf.trainable_variables()
