@@ -7,7 +7,7 @@ import numpy as np
 
 from vgg16_model import vgg16 as vgg16
 import TensorflowUtils as utils
-import read_MITSceneParsingData as scene_parsing
+import read_voa_data as scene_parsing
 import datetime
 import BatchDatasetReader as dataset
 from six.moves import xrange
