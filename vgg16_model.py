@@ -15,7 +15,8 @@ import TensorflowUtils as utils
 class vgg16(object):
     """vgg16 model."""
 
-    def __init__(self, is_training, data_format, batch_norm_decay, batch_norm_epsilon):
+    # def __init__(self, is_training, data_format, batch_norm_decay, batch_norm_epsilon):
+    def __init__(self):
         """vgg16 constructor.
 
         Args:
@@ -23,11 +24,11 @@ class vgg16(object):
           data_format: the data_format used during computation.
                        one of 'channels_first' or 'channels_last'.
         """
-        self._batch_norm_decay = batch_norm_decay
-        self._batch_norm_epsilon = batch_norm_epsilon
-        self._is_training = is_training
-        assert data_format in ('channels_first', 'channels_last')
-        self._data_format = data_format
+        # self._batch_norm_decay = batch_norm_decay
+        # self._batch_norm_epsilon = batch_norm_epsilon
+        # self._is_training = is_training
+        # assert data_format in ('channels_first', 'channels_last')
+        # self._data_format = data_format
         self._kernel_size = 3
         self._stride = 1
         self.pool_size = 2

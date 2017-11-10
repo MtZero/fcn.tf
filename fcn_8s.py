@@ -7,7 +7,7 @@ import numpy as np
 
 from vgg16_model import vgg16 as vgg16
 import TensorflowUtils as utils
-import read_MITSceneParsingData as scene_parsing
+import read_voa_data as scene_parsing
 import datetime
 import BatchDatasetReader as dataset
 from six.moves import xrange
@@ -32,6 +32,7 @@ MODEL_URL = "http://www.vlfeat.org/matconvnet/models/beta16/imagenet-vgg-verydee
 def inference(self, image, keep_prob):
     """ fcn_8s """
     # load data
+    vgg16_object= vgg16()
     print("setting up vgg initialized conv layers ...")
     model_data = utils.get_model_data(FLAGS.model_dir, MODEL_URL)
     mean = model_data['normalization'][0][0][0]
@@ -43,53 +44,53 @@ def inference(self, image, keep_prob):
 
     # deconvolution
     with tf.variable_scope("inference"):
-        image_net = vgg16._vgg16_modified(self, processed_image, weights)
+        image_net = vgg16_object._vgg16_modified(processed_image, weights)
 
         pool4, pool3 = image_net["pool4"], image_net["pool3"]
 
         conv_final_layer = image_net["conv5_3"]
 
         """ pool5 """
-        self.pool5 = vgg16._max_pool(self, conv_final_layer, 2, 2, 'pool5')
+        pool5 = vgg16_object._max_pool(self, conv_final_layer, 2, 2, 'pool5')
 
         """ fc6 """
         W6 = utils.weight_variable([7, 7, 512, 4096], name="W6")
         b6 = utils.bias_variable([4096], name="b6")
-        self.fc6 = vgg16._conv(self, self.pool5, W6, b6, 'fc6')
-        self.relu6 = vgg16._relu(self, self.fc6, 'relu6')
-        self.fc6 = tf.nn.dropout(self.relu6, keep_prob)
+        fc6 = vgg16_object._conv(self, pool5, W6, b6, 'fc6')
+        relu6 = vgg16_object._relu(self, fc6, 'relu6')
+        fc6 = tf.nn.dropout(relu6, keep_prob)
 
         """ fc7 """
         W7 = utils.weight_variable([1, 1, 4096, 4096], name="W7")
         b7 = utils.bias_variable([4096], name="b7")
-        self.fc7 = vgg16._conv(self, self.fc6, W7, b7, 'fc7')
-        self.relu7 = vgg16._relu(self, self.fc7, 'relu7')
-        self.fc7 = tf.nn.dropout(self.relu7, keep_prob)
+        fc7 = vgg16_object._conv(self, fc6, W7, b7, 'fc7')
+        relu7 = vgg16_object._relu(self, fc7, 'relu7')
+        fc7 = tf.nn.dropout(relu7, keep_prob)
 
         """ fc8 """
         W8 = utils.weight_variable([1, 1, 4096, 21], name="W8")
         b8 = utils.bias_variable([21], name="b8")
-        self.fc8 = vgg16._conv(self, self.fc7, W8, b8, 'fc8')
+        fc8 = vgg16_object._conv(self, fc7, W8, b8, 'fc8')
 
         # upsample and add with pool4
         deconv_shape1 = pool4.get_shape()
         W_t1 = tf.Variable(initial_value=tf.truncated_normal([4, 4, deconv_shape1[3].value, 21], 0.02), name="W_t1")
         b_t1 = tf.Variable(initial_value=tf.constant(0.0, shape=[deconv_shape1[3].value]), name="b_t1")
-        conv_t1 = vgg16.conv2d_transpose_strided(self, self.fc8, W_t1, b_t1, output_shape=tf.shape(pool4))
+        conv_t1 = vgg16_object.conv2d_transpose_strided(self, fc8, W_t1, b_t1, output_shape=tf.shape(pool4))
         fuse_1 = tf.add(conv_t1, pool4, name="fuse_1")
 
         # upsample and add with pool5
         deconv_shape2 = pool3.get_shape()
         W_t2 = tf.Variable(initial_value=tf.truncated_normal([4, 4, deconv_shape2[3].value, deconv_shape1[3].value], 0.02), name="W_t2")
         b_t2 = tf.Variable(initial_value=tf.constant(0.0, shape=[deconv_shape2[3].value]), name="b_t2")
-        conv_t2 = vgg16.conv2d_transpose_strided(self, fuse_1, W_t2, b_t2, output_shape=tf.shape(pool3))
+        conv_t2 = vgg16_object.conv2d_transpose_strided(self, fuse_1, W_t2, b_t2, output_shape=tf.shape(pool3))
         fuse_2 = tf.add(conv_t2, pool3, name="fuse_2")
 
         shape = tf.shape(processed_image)
         deconv_shape3 = tf.stack([shape[0], shape[1], shape[2], 21])
         W_t3 = tf.Variable(initial_value=tf.truncated_normal([16, 16, 21, deconv_shape2[3].value], 0.02), name="W_t3")
         b_t3 = tf.Variable(initial_value=tf.constant(0.0, shape=[21]), name="b_t3")
-        conv_t3 = vgg16.conv2d_transpose_strided(self, fuse_2, W_t3, b_t3, output_shape=deconv_shape3, stride=8)
+        conv_t3 = vgg16_object.conv2d_transpose_strided(self, fuse_2, W_t3, b_t3, output_shape=deconv_shape3, stride=8)
 
         prediction = tf.argmax(conv_t3, dimension=3, name="prediction")
 
