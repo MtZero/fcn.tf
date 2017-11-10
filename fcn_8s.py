@@ -3,12 +3,14 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
+import numpy as np
 
-import vgg16_model as vgg16
+from vgg16_model import vgg16 as vgg16
 import TensorflowUtils as utils
 import read_MITSceneParsingData as scene_parsing
 import datetime
 import BatchDatasetReader as dataset
+from six.moves import xrange
 
 FLAGS = tf.flags.FLAGS
 tf.flags.DEFINE_integer("batch_size", "20", "batch size for training")
@@ -16,23 +18,59 @@ tf.flags.DEFINE_string("logs_dir", "logs/", "path to logs directory")
 tf.flags.DEFINE_string("data_dir", "Data_zoo/MIT_SceneParsing/", "path to dataset")
 tf.flags.DEFINE_float("learning_rate", "1e-4", "Learning rate for Momentum Optimizer")
 tf.flags.DEFINE_bool('debug', "False", "Debug mode: True/ False")
+tf.flags.DEFINE_string("model_dir", "Model_zoo/", "Path to vgg model mat")
 tf.flags.DEFINE_string('mode', "train", "Mode train/ test/ visualize")
 tf.flags.DEFINE_float("momentum", "0.9", "momentum for Momentum Optimizer")
 tf.flags.DEFINE_float("weight_decay", "5**(−4)", "weight_decay for reg_loss")
 
+MAX_ITERATION = int(1e5 + 1)
+IMAGE_SIZE = 224
 
+MODEL_URL = "http://www.vlfeat.org/matconvnet/models/beta16/imagenet-vgg-verydeep-16.mat"
 
 def inference(self, image, keep_prob):
     """ fcn_8s """
     # load data
-    pass
+    print("setting up vgg initialized conv layers ...")
+    model_data = utils.get_model_data(FLAGS.model_dir, MODEL_URL)
+    mean = model_data['normalization'][0][0][0]
+    mean_pixel = np.mean(mean, axis=(0, 1))
+    weights = np.squeeze(model_data['layers'])
+
 
     # preprocess
-    pass
+    processed_image = utils.process_image(image, mean_pixel)
 
     # deconvolution
     with tf.variable_scope("inference"):
-        pool3, pool4, fc8 = vgg16._vgg16_modified(image_input, 1, keep_prob, True)
+        image_net = vgg16._vgg16_modified(processed_image, weights)
+
+        pool4, pool3 =  image_net["pool4"], image_net["pool3"]
+
+        conv_final_layer = image_net["conv5_3"]
+
+        """ pool5 """
+        self.pool5 = vgg16._max_pool(conv_final_layer, 2, 2, 'pool5')
+
+        """ fc6 """
+        W6 = utils.weight_variable([7, 7, 512, 4096], name="W6")
+        b6 = utils.bias_variable([4096], name="b6")
+        self.fc6 = vgg16._conv(self.pool5, W6, b6, 'fc6')
+        self.relu6 = vgg16._relu(self.fc6, 'relu6')
+        self.fc6 = tf.nn.dropout(self.relu6, keep_prob)
+
+        """ fc7 """
+        W7 = utils.weight_variable([1, 1, 4096, 4096], name="W7")
+        b7 = utils.bias_variable([4096], name="b7")
+        self.fc7 = vgg16._conv(self.fc6, W7, b7, 'fc7')
+        self.relu7 = vgg16._relu(self.fc7, 'relu7')
+        self.fc7 = tf.nn.dropout(self.relu7, keep_prob)
+
+        """ fc8 """
+        W8 = utils.weight_variable([1, 1, 4096, 21], name="W8")
+        b8 = utils.bias_variable([21], name="b8")
+        self.fc8 = vgg16._conv(self.fc7, W8, b8, 'fc8')
+
         # upsample and add with pool4
         deconv_shape1 = pool4.get_shape()
         W_t1 = tf.Variable(initializer=tf.truncated_normal([4, 4, deconv_shape1[3].value, 21], 0.02), name="W_t1")
@@ -47,7 +85,7 @@ def inference(self, image, keep_prob):
         conv_t2 = vgg16.conv2d_transpose_strided(fuse_1, W_t2, b_t2, output_shape=tf.shape(pool3))
         fuse_2 = tf.add(conv_t2, pool3, name="fuse_2")
 
-        shape = tf.shape(image_input)
+        shape = tf.shape(processed_image)
         deconv_shape3 = tf.stack([shape[0], shape[1], shape[2], 21])
         W_t3 = tf.Variable(initializer=tf.truncated_normal([16, 16, 21, deconv_shape2[3].value], 0.02), name="W_t3")
         b_t3 = tf.Variable(initializer=tf.constant(0.0, shape=[21]), name="b_t3")
@@ -55,7 +93,7 @@ def inference(self, image, keep_prob):
 
         prediction = tf.argmax(conv_t3, dimension=3, name="prediction")
 
-    return tf.expand_dims(prediction, dim=3), conv_t3
+        return tf.expand_dims(prediction, dim=3), conv_t3
 
 def train(loss_val, var_list):
     optimizer = tf.train.MomentumOptimizer(FLAGS.learning_rate, FLAGS.momentum)
