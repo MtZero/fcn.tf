@@ -8,9 +8,11 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
+import numpy as np
 
+import TensorflowUtils as utils
 
-class vgg16_model(object):
+class vgg16(object):
     """vgg16 model."""
 
     def __init__(self, is_training, data_format, batch_norm_decay, batch_norm_epsilon):
@@ -28,89 +30,61 @@ class vgg16_model(object):
         self._data_format = data_format
         self._kernel_size = 3
         self._stride = 1
-        self.pool_size = 3
+        self.pool_size = 2
         self.pool_stride = 2
 
     def forward_pass(self, x):
         raise NotImplementedError(
             'forward_pass() is implemented in ResNet sub classes')
 
-    def _vgg16_modified(self, x, keep_prob, is_training=False):
+    def _vgg16_modified(self, x, weights):
         with tf.name_scope('vgg16') as name_scope:
             orig_x = x
 
+            layers = (
+                'conv1_1', 'relu1_1', 'conv1_2', 'relu1_2', 'pool1',
+
+                'conv2_1', 'relu2_1', 'conv2_2', 'relu2_2', 'pool2',
+
+                'conv3_1', 'relu3_1', 'conv3_2', 'relu3_2', 'conv3_3',
+                'relu3_3', 'pool3',
+
+                'conv4_1', 'relu4_1', 'conv4_2', 'relu4_2', 'conv4_3',
+                'relu4_3', 'pool4',
+
+                'conv5_1', 'relu5_1', 'conv5_2', 'relu5_2', 'conv5_3',
+                'relu5_3'
+            )
             # x = self._batch_norm(x)
             # x = self._relu(x)
+            net = {}
+            current = x
+            for i, name in enumerate(layers):
+                kind = name[:4]
+                if kind == 'conv':
+                    kernels, bias = weights[i][0][0][0][0]
+                    # matconvnet: weights are [width, height, in_channels, out_channels]
+                    # tensorflow: weights are [height, width, in_channels, out_channels]
+                    kernels = utils.get_variable(np.transpose(kernels, (1, 0, 2, 3)), name=name + "_w")
+                    bias = utils.get_variable(bias.reshape(-1), name=name + "_b")
+                    current = self._conv(current, kernels, bias, name)
+                elif kind == 'relu':
+                    current = self._relu(current, name=name)
+                elif kind == 'pool':
+                    current = self._max_pool(current, self.pool_size, self.pool_stride, name)
+                net[name] = current
 
-            """ conv_1 """
-            self.conv1_1 = self._conv(x, self._kernel_size, 64, self._stride, 'conv1_1')
-            self.conv1_2 = self._conv(self.conv1_1, self._kernel_size, 64, self._stride, 'conv1_2')
-            self.pool1 = self._max_pool(self.conv1_2, self.pool_size, self.pool_stride, 'max_pool1')
+            return net
+            
 
-            """ conv_2 """
-            self.conv2_1 = self._conv(self.pool1, self._kernel_size, 128, self._stride, 'conv2_1')
-            self.conv2_2 = self._conv(self.conv2_1, self._kernel_size, 128, self._stride, 'conv2_2')
-            self.pool2 = self._max_pool(self.conv2_2, self.pool_size, self.pool_stride, 'max_pool2')
-
-            """ conv_3 """
-            self.conv3_1 = self._conv(self.pool2, self._kernel_size, 256, self._stride, 'conv3_1')
-            self.conv3_2 = self._conv(self.conv3_1, self._kernel_size, 256, self._stride, 'conv3_2')
-            self.conv3_3 = self._conv(self.conv3_2, self._kernel_size, 256, self._stride, 'conv3_3')
-            self.pool3 = self._max_pool(self.conv3_3, self.pool_size, self.pool_stride, 'max_pool3')
-
-            """ conv_4 """
-            self.conv4_1 = self._conv(self.pool3, self._kernel_size, 512, self._stride, 'conv4_1')
-            self.conv4_2 = self._conv(self.conv4_1, self._kernel_size, 512, self._stride, 'conv4_2')
-            self.conv4_3 = self._conv(self.conv4_2, self._kernel_size, 512, self._stride, 'conv4_3')
-            self.pool4 = self._max_pool(self.conv4_3, self.pool_size, self.pool_stride, 'max_pool4')
-
-            """ conv_5 """
-            self.conv5_1 = self._conv(self.pool4, self._kernel_size, 512, self._stride, 'conv5_1')
-            self.conv5_2 = self._conv(self.conv5_1, self._kernel_size, 512, self._stride, 'conv5_2')
-            self.conv5_3 = self._conv(self.conv5_2, self._kernel_size, 512, self._stride, 'conv5_3')
-            self.pool5 = self._max_pool(self.conv5_3, self.pool_size, self.pool_stride, 'max_pool5')
-
-            """ fc6 """
-            self.fc6 = self._conv(self.pool5, 7, 4096, self._stride, 'fc6')
-            if is_training:
-                self.fc6 = tf.nn.dropout(self.fc6, keep_prob)
-
-            """ fc7 """
-            self.fc7 = self._conv(self.fc6, 1, 4096, self._stride, 'fc7')
-            if is_training:
-                self.fc7 = tf.nn.dropout(self.fc7, keep_prob)
-
-            """ fc8 """
-            self.fc8 = self._conv(self.fc8, 1, 21, self._stride, 'fc8')
-
-            return self.pool3, self.pool4, self.fc8
-
-    def _conv(self, x, kernel_size, filters, strides, name):
+    def _conv(self, x, W, bias, name):
         """Convolution."""
         with tf.variable_scope(name) as scope:
-            padding = 'SAME'
-            pad = kernel_size - 1
-            pad_beg = pad // 2
-            pad_end = pad - pad_beg
-            if self._data_format == 'channels_first':
-                x = tf.pad(x, [[0, 0], [0, 0], [pad_beg, pad_end], [pad_beg, pad_end]])
-            else:
-                x = tf.pad(x, [[0, 0], [pad_beg, pad_end], [pad_beg, pad_end], [0, 0]])
-            x = tf.layers.conv2d(
-                inputs=x,
-                kernel_size=kernel_size,
-                filters=filters,
-                strides=strides,
-                padding=padding,
-                use_bias=False,
-                data_format=self._data_format)
-
+            conv = tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding="SAME")
+            return tf.nn.bias_add(conv, bias)
             # bn = self._batch_norm(x)
-            relu = self._relu(x)
-            # Add summary to Tensorboard
-            _activation_summary(relu)
-            return relu
 
+        
     def _batch_norm(self, x):
         if self._data_format == 'channels_first':
             data_format = 'NCHW'
@@ -126,8 +100,8 @@ class vgg16_model(object):
             fused=True,
             data_format=data_format)
 
-    def _relu(self, x):
-        return tf.nn.relu(x)
+    def _relu(self, x, name):
+        return tf.nn.relu(x, name=name)
 
     def _fully_connected(self, x, out_dim):
         with tf.name_scope('fully_connected') as name_scope:
