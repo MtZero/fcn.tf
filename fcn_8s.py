@@ -28,6 +28,7 @@ IMAGE_SIZE = 500
 
 MODEL_URL = "http://www.vlfeat.org/matconvnet/models/beta16/imagenet-vgg-verydeep-16.mat"
 
+
 def inference(self, image, keep_prob):
     """ fcn_8s """
     # load data
@@ -37,63 +38,63 @@ def inference(self, image, keep_prob):
     mean_pixel = np.mean(mean, axis=(0, 1))
     weights = np.squeeze(model_data['layers'])
 
-
     # preprocess
     processed_image = utils.process_image(image, mean_pixel)
 
     # deconvolution
     with tf.variable_scope("inference"):
-        image_net = vgg16._vgg16_modified(processed_image, weights)
+        image_net = vgg16._vgg16_modified(self, processed_image, weights)
 
-        pool4, pool3 =  image_net["pool4"], image_net["pool3"]
+        pool4, pool3 = image_net["pool4"], image_net["pool3"]
 
         conv_final_layer = image_net["conv5_3"]
 
         """ pool5 """
-        self.pool5 = vgg16._max_pool(conv_final_layer, 2, 2, 'pool5')
+        self.pool5 = vgg16._max_pool(self, conv_final_layer, 2, 2, 'pool5')
 
         """ fc6 """
         W6 = utils.weight_variable([7, 7, 512, 4096], name="W6")
         b6 = utils.bias_variable([4096], name="b6")
-        self.fc6 = vgg16._conv(self.pool5, W6, b6, 'fc6')
-        self.relu6 = vgg16._relu(self.fc6, 'relu6')
+        self.fc6 = vgg16._conv(self, self.pool5, W6, b6, 'fc6')
+        self.relu6 = vgg16._relu(self, self.fc6, 'relu6')
         self.fc6 = tf.nn.dropout(self.relu6, keep_prob)
 
         """ fc7 """
         W7 = utils.weight_variable([1, 1, 4096, 4096], name="W7")
         b7 = utils.bias_variable([4096], name="b7")
-        self.fc7 = vgg16._conv(self.fc6, W7, b7, 'fc7')
-        self.relu7 = vgg16._relu(self.fc7, 'relu7')
+        self.fc7 = vgg16._conv(self, self.fc6, W7, b7, 'fc7')
+        self.relu7 = vgg16._relu(self, self.fc7, 'relu7')
         self.fc7 = tf.nn.dropout(self.relu7, keep_prob)
 
         """ fc8 """
         W8 = utils.weight_variable([1, 1, 4096, 21], name="W8")
         b8 = utils.bias_variable([21], name="b8")
-        self.fc8 = vgg16._conv(self.fc7, W8, b8, 'fc8')
+        self.fc8 = vgg16._conv(self, self.fc7, W8, b8, 'fc8')
 
         # upsample and add with pool4
         deconv_shape1 = pool4.get_shape()
-        W_t1 = tf.Variable(initializer=tf.truncated_normal([4, 4, deconv_shape1[3].value, 21], 0.02), name="W_t1")
-        b_t1 = tf.Variable(initializer=tf.constant(0.0, shape=[deconv_shape1[3].value]), name="b_t1")
-        conv_t1 = vgg16.conv2d_transpose_strided(fc8, W_t1, b_t1, output_shape=tf.shape(pool4))
+        W_t1 = tf.Variable(initial_value=tf.truncated_normal([4, 4, deconv_shape1[3].value, 21], 0.02), name="W_t1")
+        b_t1 = tf.Variable(initial_value=tf.constant(0.0, shape=[deconv_shape1[3].value]), name="b_t1")
+        conv_t1 = vgg16.conv2d_transpose_strided(self, self.fc8, W_t1, b_t1, output_shape=tf.shape(pool4))
         fuse_1 = tf.add(conv_t1, pool4, name="fuse_1")
 
         # upsample and add with pool5
         deconv_shape2 = pool3.get_shape()
-        W_t2 = tf.Variable(initializer=tf.truncated_normal([4, 4, deconv_shape2[3].value, deconv_shape1[3].value], 0.02), name="W_t2")
-        b_t2 = tf.Variable(initializer=tf.constant(0.0, shape=[deconv_shape2[3].value]), name="b_t2")
-        conv_t2 = vgg16.conv2d_transpose_strided(fuse_1, W_t2, b_t2, output_shape=tf.shape(pool3))
+        W_t2 = tf.Variable(initial_value=tf.truncated_normal([4, 4, deconv_shape2[3].value, deconv_shape1[3].value], 0.02), name="W_t2")
+        b_t2 = tf.Variable(initial_value=tf.constant(0.0, shape=[deconv_shape2[3].value]), name="b_t2")
+        conv_t2 = vgg16.conv2d_transpose_strided(self, fuse_1, W_t2, b_t2, output_shape=tf.shape(pool3))
         fuse_2 = tf.add(conv_t2, pool3, name="fuse_2")
 
         shape = tf.shape(processed_image)
         deconv_shape3 = tf.stack([shape[0], shape[1], shape[2], 21])
-        W_t3 = tf.Variable(initializer=tf.truncated_normal([16, 16, 21, deconv_shape2[3].value], 0.02), name="W_t3")
-        b_t3 = tf.Variable(initializer=tf.constant(0.0, shape=[21]), name="b_t3")
-        conv_t3 = vgg16.conv2d_transpose_strided(fuse_2, W_t3, b_t3, output_shape=deconv_shape3, stride=8)
+        W_t3 = tf.Variable(initial_value=tf.truncated_normal([16, 16, 21, deconv_shape2[3].value], 0.02), name="W_t3")
+        b_t3 = tf.Variable(initial_value=tf.constant(0.0, shape=[21]), name="b_t3")
+        conv_t3 = vgg16.conv2d_transpose_strided(self, fuse_2, W_t3, b_t3, output_shape=deconv_shape3, stride=8)
 
         prediction = tf.argmax(conv_t3, dimension=3, name="prediction")
 
         return tf.expand_dims(prediction, dim=3), conv_t3
+
 
 def train(loss_val, var_list):
     optimizer = tf.train.MomentumOptimizer(FLAGS.learning_rate, FLAGS.momentum)
@@ -103,20 +104,22 @@ def train(loss_val, var_list):
         for grad, var in grads:
             utils.add_gradient_summary(grad, var)
     return optimizer.apply_gradients(grads)
-    
+
+
 def main(argv=None):
     keep_probability = tf.placeholder(tf.float32, name="keep_probabilty")
     image = tf.placeholder(tf.float32, shape=[None, IMAGE_SIZE, IMAGE_SIZE, 3], name="input_image")
     annotation = tf.placeholder(tf.int32, shape=[None, IMAGE_SIZE, IMAGE_SIZE, 1], name="annotation")
 
+    # TODO
     pred_annotation, logits = inference(image, keep_probability)
-    tf.image_summary("input_image", image, max_images=20)
-    tf.image_summary("ground_truth", tf.cast(annotation, tf.uint8), max_images=20)
-    tf.image_summary("pred_annotation", tf.cast(pred_annotation, tf.uint8), max_images=20)
+    tf.summary.image("input_image", image, max_outputs=20)
+    tf.summary.image("ground_truth", tf.cast(annotation, tf.uint8), max_outputs=20)
+    tf.summary.image("pred_annotation", tf.cast(pred_annotation, tf.uint8), max_outputs=20)
     loss = tf.reduce_mean((tf.nn.sparse_softmax_cross_entropy_with_logits(logits,
                                                                           tf.squeeze(annotation, squeeze_dims=[3]),
                                                                           name="entropy")))
-    tf.scalar_summary("entropy", loss)
+    tf.summary.scalar("entropy", loss)
 
     trainable_var = tf.trainable_variables()
     if FLAGS.debug:
@@ -127,7 +130,7 @@ def main(argv=None):
     train_op = train(loss, trainable_var)
 
     print("Setting up summary op...")
-    summary_op = tf.merge_all_summaries()
+    summary_op = tf.summary.merge_all()
 
     print("Setting up image reader...")
     train_records, valid_records = scene_parsing.read_dataset(FLAGS.data_dir)
@@ -144,7 +147,7 @@ def main(argv=None):
 
     print("Setting up Saver...")
     saver = tf.train.Saver()
-    summary_writer = tf.train.SummaryWriter(FLAGS.logs_dir, sess.graph)
+    summary_writer = tf.summary.FileWriter(FLAGS.logs_dir, sess.graph)
 
     sess.run(tf.initialize_all_variables())
     ckpt = tf.train.get_checkpoint_state(FLAGS.logs_dir)
@@ -179,7 +182,7 @@ def main(argv=None):
         pred = np.squeeze(pred, axis=3)
 
         for itr in range(FLAGS.batch_size):
-            utils.save_image(valid_images[itr].astype(np.uint8), FLAGS.logs_dir, name="inp_" + str(5+itr))
-            utils.save_image(valid_annotations[itr].astype(np.uint8), FLAGS.logs_dir, name="gt_" + str(5+itr))
-            utils.save_image(pred[itr].astype(np.uint8), FLAGS.logs_dir, name="pred_" + str(5+itr))
+            utils.save_image(valid_images[itr].astype(np.uint8), FLAGS.logs_dir, name="inp_" + str(5 + itr))
+            utils.save_image(valid_annotations[itr].astype(np.uint8), FLAGS.logs_dir, name="gt_" + str(5 + itr))
+            utils.save_image(pred[itr].astype(np.uint8), FLAGS.logs_dir, name="pred_" + str(5 + itr))
             print("Saved image: %d" % itr)
