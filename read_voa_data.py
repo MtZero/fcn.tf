@@ -1,9 +1,9 @@
-import numpy as np
+# import numpy as np
 import os
-import glob
-import TensorflowUtils as utils
-from six.moves import cPickle as pickle
-from tensorflow.python.platform import gfile
+# import glob
+# import TensorflowUtils as utils
+# from six.moves import cPickle as pickle
+# from tensorflow.python.platform import gfile
 
 
 def read_dataset(data_dir):
@@ -25,4 +25,3 @@ def read_dataset(data_dir):
         image["validation"]["images"].append(os.path.join(images_path, line + ".jpg"))
         image["validation"]["annotations"].append(os.path.join(annotations_path, line + ".png"))
     return image
-
