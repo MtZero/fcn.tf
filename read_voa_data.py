@@ -24,4 +24,5 @@ def read_dataset(data_dir):
     for line in valid_set_index:
         image["validation"]["images"].append(os.path.join(images_path, line + ".jpg"))
         image["validation"]["annotations"].append(os.path.join(annotations_path, line + ".png"))
-    return image
+    print(image["training"]["images"][0])
+    return image["training"], image["validation"]

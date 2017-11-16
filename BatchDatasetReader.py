@@ -31,14 +31,11 @@ class BatchDatasetReader:
         self.image_options = image_options
         self._read_images()
 
-    def _read_images(self, file_list="training"):
+    def _read_images(self):
         self.__channels = True
-        self.images = np.array([self._transform(filename for filename in filenames['images'])
-                                for filenames in self.files[file_list]])
+        self.images = np.array([self._transform(filename) for filename in self.files["images"]])
         self.__channels = False
-        self.annotations = np.array(
-            [np.expand_dims(self._transform(filename for filename in filenames['annotations']), axis=3)
-             for filenames in self.files[file_list]])
+        self.annotations = np.array([self._transform(filename) for filename in self.files["annotations"]])
         print(self.images.shape)
         print(self.annotations.shape)
 
