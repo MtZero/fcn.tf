@@ -121,7 +121,8 @@ class vgg16(object):
 
     def _max_pool(self, x, pool_size, stride, name):
         with tf.name_scope(name) as name_scope:
-            x = tf.layers.max_pooling2d(x, pool_size, stride, 'SAME')
+            x = tf.layers.max_pooling2d(
+                x, pool_size, stride, 'SAME')
 
         tf.logging.info('image after unit %s: %s', name_scope, x.get_shape())
         return x
