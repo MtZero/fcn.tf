@@ -32,7 +32,7 @@ MODEL_URL = "http://www.vlfeat.org/matconvnet/models/beta16/imagenet-vgg-verydee
 def inference(image, keep_prob):
     """ fcn_8s """
     # load data
-    vgg16_object= vgg16()
+    vgg16_object = vgg16()
     print("setting up vgg initialized conv layers ...")
     model_data = utils.get_model_data(FLAGS.model_dir, MODEL_URL)
     mean = model_data['normalization'][0][0][0]
@@ -74,7 +74,7 @@ def inference(image, keep_prob):
 
         # upsample and add with pool4
         deconv_shape1 = pool4.get_shape()
-        score1_W = utils.weight_variable([1,1, 512, 21], name="score1_W")
+        score1_W = utils.weight_variable([1, 1, 512, 21], name="score1_W")
         score1_b = utils.bias_variable([21], name="score1_b")
         score1 = vgg16_object._conv(pool4, score1_W, score1_b, 'score1')
         W_t1 = tf.Variable(initial_value=tf.truncated_normal([4, 4, deconv_shape1[3].value, 21], 0.02), name="W_t1")
@@ -84,10 +84,12 @@ def inference(image, keep_prob):
 
         # upsample and add with pool5
         deconv_shape2 = pool3.get_shape()
-        score2_W = utils.weight_variable([1,1, 512, 21], name="score2_W")
+        score2_W = utils.weight_variable([1, 1, 512, 21], name="score2_W")
         score2_b = utils.bias_variable([21], name="score2_b")
         score2 = vgg16_object._conv(pool3, score2_W, score2_b, 'score2')
-        W_t2 = tf.Variable(initial_value=tf.truncated_normal([4, 4, deconv_shape2[3].value, deconv_shape1[3].value], 0.02), name="W_t2")
+        W_t2 = tf.Variable(
+            initial_value=tf.truncated_normal([4, 4, deconv_shape2[3].value, deconv_shape1[3].value], 0.02),
+            name="W_t2")
         b_t2 = tf.Variable(initial_value=tf.constant(0.0, shape=[deconv_shape2[3].value]), name="b_t2")
         conv_t2 = vgg16_object.conv2d_transpose_strided(fuse_1, W_t2, b_t2, output_shape=tf.shape(score2))
         fuse_2 = tf.add(conv_t2, score2, name="fuse_2")
@@ -122,7 +124,8 @@ def main(argv=None):
     tf.summary.image("input_image", image, max_outputs=20)
     tf.summary.image("ground_truth", tf.cast(annotation, tf.uint8), max_outputs=20)
     tf.summary.image("pred_annotation", tf.cast(pred_annotation, tf.uint8), max_outputs=20)
-    loss = tf.reduce_mean((tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=tf.squeeze(annotation, squeeze_dims=[3]))))
+    loss = tf.reduce_mean(
+        (tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=tf.squeeze(annotation, squeeze_dims=[3]))))
     tf.summary.scalar("entropy", loss)
 
     trainable_var = tf.trainable_variables()
@@ -186,11 +189,11 @@ def main(argv=None):
         pred = np.squeeze(pred, axis=3)
 
         for itr in range(FLAGS.batch_size):
-
             utils.save_image(valid_images[itr].astype(np.uint8), FLAGS.logs_dir, name="inp_" + str(5 + itr))
             utils.save_image(valid_annotations[itr].astype(np.uint8), FLAGS.logs_dir, name="gt_" + str(5 + itr))
             utils.save_image(pred[itr].astype(np.uint8), FLAGS.logs_dir, name="pred_" + str(5 + itr))
             print("Saved image: %d" % itr)
+
 
 if __name__ == "__main__":
     tf.app.run()

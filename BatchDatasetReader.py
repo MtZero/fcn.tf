@@ -51,10 +51,10 @@ class BatchDatasetReader:
             image = image.transpose([1, 2, 0])
 
         # fill the image to 500x500
-        img_fill = np.zeros([500, 500, 3], 'uint8')
+        img_fill = np.zeros([512, 512, 3], 'uint8')
         img_h, img_w = image.shape[0], image.shape[1]
-        img_h_fill = (500 - img_h) // 2
-        img_w_fill = (500 - img_w) // 2
+        img_h_fill = (512 - img_h) // 2
+        img_w_fill = (512 - img_w) // 2
         for idx_i, i in enumerate(image):
             for idx_j, j in enumerate(i):
                 img_fill[idx_i + img_h_fill][idx_j + img_w_fill] = j
