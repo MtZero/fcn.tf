@@ -3,6 +3,7 @@ Code ideas from https://github.com/Newmu/dcgan and tensorflow mnist dataset read
 """
 import numpy as np
 import scipy.misc as misc
+from PIL import Image
 
 
 class BatchDatasetReader:
@@ -36,13 +37,27 @@ class BatchDatasetReader:
         self.__channels = False
         self.annotations = np.array(
             [np.expand_dims(self._transform(filename['annotation']), axis=3) for filename in self.files])
-        print (self.images.shape)
-        print (self.annotations.shape)
+        print(self.images.shape)
+        print(self.annotations.shape)
 
     def _transform(self, filename):
-        image = misc.imread(filename)
+        image = np.array(Image.open(filename))
+        # ensure that the pictures and the annotations have the same dimensions
         if self.__channels and len(image.shape) < 3:  # make sure images are of shape(h,w,3)
             image = np.array([image for i in range(3)])
+            # 转置维度
+            image = image.transpose([1, 2, 0])
+
+        # fill the image to 500x500
+        img_fill = np.zeros([500, 500, 3], 'uint8')
+        img_h, img_w = image.shape[0], image.shape[1]
+        img_h_fill = (500 - img_h) // 2
+        img_w_fill = (500 - img_w) // 2
+        for idx_i, i in enumerate(image):
+            for idx_j, j in enumerate(i):
+                img_fill[idx_i + img_h_fill][idx_j + img_w_fill] = j
+        image = img_fill
+        del img_fill
 
         if self.image_options.get("resize", False) and self.image_options["resize"]:
             resize_size = int(self.image_options["resize_size"])
