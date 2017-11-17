@@ -32,7 +32,7 @@ MODEL_URL = "http://www.vlfeat.org/matconvnet/models/beta16/imagenet-vgg-verydee
 def inference(image, keep_prob):
     """ fcn_8s """
     # load data
-    vgg16_object= vgg16()
+    vgg16_object = vgg16()
     print("setting up vgg initialized conv layers ...")
     model_data = utils.get_model_data(FLAGS.model_dir, MODEL_URL)
     mean = model_data['normalization'][0][0][0]
@@ -117,7 +117,7 @@ def main(argv=None):
     tf.summary.image("input_image", image, max_outputs=20)
     tf.summary.image("ground_truth", tf.cast(annotation, tf.uint8), max_outputs=20)
     tf.summary.image("pred_annotation", tf.cast(pred_annotation, tf.uint8), max_outputs=20)
-    loss = tf.reduce_mean((tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=annotation)))
+    loss = tf.reduce_mean((tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=annotation)))
     tf.summary.scalar("entropy", loss)
 
     trainable_var = tf.trainable_variables()
@@ -181,11 +181,11 @@ def main(argv=None):
         pred = np.squeeze(pred, axis=3)
 
         for itr in range(FLAGS.batch_size):
-
             utils.save_image(valid_images[itr].astype(np.uint8), FLAGS.logs_dir, name="inp_" + str(5 + itr))
             utils.save_image(valid_annotations[itr].astype(np.uint8), FLAGS.logs_dir, name="gt_" + str(5 + itr))
             utils.save_image(pred[itr].astype(np.uint8), FLAGS.logs_dir, name="pred_" + str(5 + itr))
             print("Saved image: %d" % itr)
+
 
 if __name__ == "__main__":
     tf.app.run()

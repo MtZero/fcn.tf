@@ -1,7 +1,6 @@
-.idea/*
 dataset/*
 .idea/
-Model_zoo/*
+.vscode/
+__pycache__/
+Model_zoo/
 logs/*
-.vscode/*
-__pycache__/*
