@@ -59,7 +59,7 @@ class BatchDatasetReader:
 
         # fill the image to 500x500
         if img_h < 500 or img_w < 500:
-            img_fill = np.zeros([500, 500, 3], 'uint8') if len(image.shape) == 3 else np.zeros([500, 500], 'uint8')
+            img_fill = np.zeros([500, 500, 3], 'int32') if len(image.shape) == 3 else np.zeros([500, 500], 'int32')
             
             img_h_fill = (500 - img_h) // 2
             img_w_fill = (500 - img_w) // 2
@@ -72,9 +72,17 @@ class BatchDatasetReader:
         if self.image_options.get("resize", False) and self.image_options["resize"]:
             resize_size = int(self.image_options["resize_size"])
             resize_image = misc.imresize(image,
-                                         [resize_size, resize_size], interp='nearest')
+                                         [resize_size, resize_size], interp='bilinear')
         else:
             resize_image = image
+        
+        if len(image.shape) == 2:
+            a = tf.constant(250, shape=[500,500], dtype=tf.int32)
+            less_than_255 = tf.cast(tf.less(image, a), dtype=tf.int32)
+            resize_image = less_than_255 * image
+            sess = tf.Session()
+            resize_image = resize_image.eval(session=sess)
+            
 
         return np.array(resize_image)
 
@@ -100,11 +108,16 @@ class BatchDatasetReader:
         transformed = self.images_filename if filetype == "images" else self.annotations_filename
         for filename in self.files[filetype]:
             if filetype == "images":
-                im = Image.fromarray(self.images[i])
-                im.save(filename.replace(origin, transformed))
+                new_img = Image.fromarray(self.images[i])
+                new_img.save(filename.replace(origin, transformed))
             else:
-                im = Image.fromarray(self.annotations[i])
-                im.save(filename.replace(origin, transformed))
+                # 获取颜色表
+                pal = (Image.open(filename)).getpalette()
+                print(self.annotations.shape)
+                new_img = Image.fromarray(self.annotations[i], mode="P")
+                # 设置颜色表
+                new_img.putpalette(pal)
+                new_img.save(filename.replace(origin, transformed))
             i += 1
 
     def get_records(self):
