@@ -15,7 +15,7 @@ from six.moves import xrange
 FLAGS = tf.flags.FLAGS
 tf.flags.DEFINE_integer("batch_size", "20", "batch size for training")
 tf.flags.DEFINE_string("logs_dir", "logs/", "path to logs directory")
-tf.flags.DEFINE_string("data_dir", "/home/share/jiafeng/FCN_DATASET/", "path to dataset")
+tf.flags.DEFINE_string("data_dir", "dataset/", "path to dataset")
 tf.flags.DEFINE_float("learning_rate", "1e-4", "Learning rate for Momentum Optimizer")
 tf.flags.DEFINE_bool('debug', "False", "Debug mode: True/ False")
 tf.flags.DEFINE_string("model_dir", "Model_zoo/", "Path to vgg model mat")
@@ -74,25 +74,17 @@ def inference(image, keep_prob):
 
         # upsample and add with pool4
         deconv_shape1 = pool4.get_shape()
-        score1_W = utils.weight_variable([1, 1, 512, 21], name="score1_W")
-        score1_b = utils.bias_variable([21], name="score1_b")
-        score1 = vgg16_object._conv(pool4, score1_W, score1_b, 'score1')
         W_t1 = tf.Variable(initial_value=tf.truncated_normal([4, 4, deconv_shape1[3].value, 21], 0.02), name="W_t1")
         b_t1 = tf.Variable(initial_value=tf.constant(0.0, shape=[deconv_shape1[3].value]), name="b_t1")
-        conv_t1 = vgg16_object.conv2d_transpose_strided(fc8, W_t1, b_t1, output_shape=tf.shape(score1))
-        fuse_1 = tf.add(conv_t1, score1, name="fuse_1")
+        conv_t1 = vgg16_object.conv2d_transpose_strided(fc8, W_t1, b_t1, output_shape=tf.shape(pool4))
+        fuse_1 = tf.add(conv_t1, pool4, name="fuse_1")
 
         # upsample and add with pool5
         deconv_shape2 = pool3.get_shape()
-        score2_W = utils.weight_variable([1, 1, 512, 21], name="score2_W")
-        score2_b = utils.bias_variable([21], name="score2_b")
-        score2 = vgg16_object._conv(pool3, score2_W, score2_b, 'score2')
-        W_t2 = tf.Variable(
-            initial_value=tf.truncated_normal([4, 4, deconv_shape2[3].value, deconv_shape1[3].value], 0.02),
-            name="W_t2")
+        W_t2 = tf.Variable(initial_value=tf.truncated_normal([4, 4, deconv_shape2[3].value, deconv_shape1[3].value], 0.02), name="W_t2")
         b_t2 = tf.Variable(initial_value=tf.constant(0.0, shape=[deconv_shape2[3].value]), name="b_t2")
-        conv_t2 = vgg16_object.conv2d_transpose_strided(fuse_1, W_t2, b_t2, output_shape=tf.shape(score2))
-        fuse_2 = tf.add(conv_t2, score2, name="fuse_2")
+        conv_t2 = vgg16_object.conv2d_transpose_strided(fuse_1, W_t2, b_t2, output_shape=tf.shape(pool3))
+        fuse_2 = tf.add(conv_t2, pool3, name="fuse_2")
 
         shape = tf.shape(processed_image)
         deconv_shape3 = tf.stack([shape[0], shape[1], shape[2], 21])
@@ -109,6 +101,7 @@ def train(loss_val, var_list):
     optimizer = tf.train.MomentumOptimizer(FLAGS.learning_rate, FLAGS.momentum)
     grads = optimizer.compute_gradients(loss_val, var_list=var_list)
     if FLAGS.debug:
+        # print(len(var_list))
         for grad, var in grads:
             utils.add_gradient_summary(grad, var)
     return optimizer.apply_gradients(grads)
