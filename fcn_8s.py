@@ -118,11 +118,7 @@ def main(argv=None):
     tf.summary.image("input_image", image, max_outputs=20)
     # tf.summary.image("ground_truth", tf.cast(annotation, tf.uint8), max_outputs=20)
     tf.summary.image("pred_annotation", tf.cast(pred_annotation, tf.uint8), max_outputs=20)
-<<<<<<< HEAD
     loss = tf.reduce_mean((tf.nn.sparse_softmax_cross_entropy_with_logits(logits=tf.clip_by_value(tf.cast(logits, dtype=tf.float32), 1e-10, 1), labels=tf.cast(annotation, dtype=tf.int32))))
-=======
-    loss = tf.reduce_mean((tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=annotation)))
->>>>>>> 71cb9af29277aa084bb654d421eec7d51d2e76ea
     tf.summary.scalar("entropy", loss)
 
     trainable_var = tf.trainable_variables()
@@ -189,16 +185,16 @@ def main(argv=None):
         pred = np.squeeze(pred, axis=3)
 
         for itr in range(FLAGS.batch_size):
-<<<<<<< HEAD
+            # save gt
             pal = (Image.open('/home/jingyang/Desktop/fcn/fcn_test/dataset/SegmentationClass_tranformed/2007_000032.png')).getpalette()
             new_img = Image.fromarray(valid_annotations[itr], mode="P")
             new_img.putpalette(pal)
             path = "logs/gt_"+ str(5 + itr)+".png"
             new_img.save(path)
-=======
->>>>>>> 71cb9af29277aa084bb654d421eec7d51d2e76ea
+            # save inp
             utils.save_image(valid_images[itr].astype(np.uint8), FLAGS.logs_dir, name="inp_" + str(5 + itr))
             #utils.save_image(valid_annotations[itr].astype(np.uint8), FLAGS.logs_dir, name="gt_" + str(5 + itr))
+            # save pred
             new_img = Image.fromarray(pred[itr], mode="P")
             new_img.putpalette(pal)
             path = "logs/pred_"+ str(5 + itr)+".png"
