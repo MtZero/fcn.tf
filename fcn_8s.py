@@ -110,7 +110,7 @@ def train(loss_val, var_list):
 def main(argv=None):
     keep_probability = tf.placeholder(tf.float32, name="keep_probabilty")
     image = tf.placeholder(tf.float32, shape=[None, IMAGE_SIZE, IMAGE_SIZE, 3], name="input_image")
-    annotation = tf.placeholder(tf.int32, shape=[None, IMAGE_SIZE, IMAGE_SIZE, 1], name="annotation")
+    annotation = tf.placeholder(tf.int32, shape=[None, IMAGE_SIZE, IMAGE_SIZE, 3], name="annotation")
 
     # TODO
     pred_annotation, logits = inference(image, keep_probability)
@@ -118,7 +118,7 @@ def main(argv=None):
     tf.summary.image("ground_truth", tf.cast(annotation, tf.uint8), max_outputs=20)
     tf.summary.image("pred_annotation", tf.cast(pred_annotation, tf.uint8), max_outputs=20)
     loss = tf.reduce_mean(
-        (tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=tf.squeeze(annotation, squeeze_dims=[3]))))
+        (tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=annotation)))
     tf.summary.scalar("entropy", loss)
 
     trainable_var = tf.trainable_variables()
