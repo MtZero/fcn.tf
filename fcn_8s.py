@@ -17,7 +17,7 @@ FLAGS = tf.flags.FLAGS
 tf.flags.DEFINE_integer("batch_size", "10", "batch size for training")
 tf.flags.DEFINE_string("logs_dir", "logs/", "path to logs directory")
 tf.flags.DEFINE_string("data_dir", "dataset/", "path to dataset")
-tf.flags.DEFINE_float("learning_rate", "1e-3", "Learning rate for Momentum Optimizer")
+tf.flags.DEFINE_float("learning_rate", "1e-4", "Learning rate for Momentum Optimizer")
 tf.flags.DEFINE_bool('debug', "False", "Debug mode: True/ False")
 tf.flags.DEFINE_string("model_dir", "Model_zoo/", "Path to vgg model mat")
 tf.flags.DEFINE_string('mode', "train", "Mode train/ test/ visualize")
@@ -33,7 +33,7 @@ MODEL_URL = "http://www.vlfeat.org/matconvnet/models/beta16/imagenet-vgg-verydee
 def inference(image, keep_prob):
     """ fcn_8s """
     # load data
-    vgg16_object= vgg16()
+    vgg16_object = vgg16()
     print("setting up vgg initialized conv layers ...")
     model_data = utils.get_model_data(FLAGS.model_dir, MODEL_URL)
     mean = model_data['normalization'][0][0][0]
@@ -73,23 +73,27 @@ def inference(image, keep_prob):
         b8 = utils.bias_variable([21], name="b8")
         fc8 = vgg16_object._conv(fc7, W8, b8, 'fc8')
 
-        # upsample and add with pool4
-        deconv_shape1 = pool4.get_shape()
-        W_t1 = tf.Variable(initial_value=tf.truncated_normal([4, 4, deconv_shape1[3].value, 21], 0.02), name="W_t1")
-        b_t1 = tf.Variable(initial_value=tf.constant(0.0, shape=[deconv_shape1[3].value]), name="b_t1")
-        conv_t1 = vgg16_object.conv2d_transpose_strided(fc8, W_t1, b_t1, output_shape=tf.shape(pool4))
-        fuse_1 = tf.add(conv_t1, pool4, name="fuse_1")
+        # upsample and add with pool4(pool4 should pass through a score layer)
+        score_w1 = utils.weight_variable([1,1,512,21], name="score_w1")
+        score_b1 = utils.weight_variable([21], name="score_b1")
+        score1 = vgg16_object._conv(pool4, score_w1, score_b1, 'score1')
+        W_t1 = tf.Variable(initial_value=tf.truncated_normal([4, 4, 21, 21], 0.02), name="W_t1")
+        b_t1 = tf.Variable(initial_value=tf.constant(0.0, shape=[21]), name="b_t1")
+        conv_t1 = vgg16_object.conv2d_transpose_strided(fc8, W_t1, b_t1, output_shape=tf.shape(score1))
+        fuse_1 = tf.add(conv_t1, score1, name="fuse_1")
 
-        # upsample and add with pool5
-        deconv_shape2 = pool3.get_shape()
-        W_t2 = tf.Variable(initial_value=tf.truncated_normal([4, 4, deconv_shape2[3].value, deconv_shape1[3].value], 0.02), name="W_t2")
-        b_t2 = tf.Variable(initial_value=tf.constant(0.0, shape=[deconv_shape2[3].value]), name="b_t2")
-        conv_t2 = vgg16_object.conv2d_transpose_strided(fuse_1, W_t2, b_t2, output_shape=tf.shape(pool3))
-        fuse_2 = tf.add(conv_t2, pool3, name="fuse_2")
+        # upsample and add with pool3(pool3 should pass through a score layer)
+        score_w2 = utils.weight_variable([1,1,256,21], name="score_w2")
+        score_b2 = utils.weight_variable([21], name="score_b2")
+        score2 = vgg16_object._conv(pool3, score_w2, score_b2, 'score2')
+        W_t2 = tf.Variable(initial_value=tf.truncated_normal([4, 4, 21, 21], 0.02), name="W_t2")
+        b_t2 = tf.Variable(initial_value=tf.constant(0.0, shape=[21]), name="b_t2")
+        conv_t2 = vgg16_object.conv2d_transpose_strided(fuse_1, W_t2, b_t2, output_shape=tf.shape(score2))
+        fuse_2 = tf.add(conv_t2, score2, name="fuse_2")
 
         shape = tf.shape(processed_image)
         deconv_shape3 = tf.stack([shape[0], shape[1], shape[2], 21])
-        W_t3 = tf.Variable(initial_value=tf.truncated_normal([16, 16, 21, deconv_shape2[3].value], 0.02), name="W_t3")
+        W_t3 = tf.Variable(initial_value=tf.truncated_normal([16, 16, 21, 21], 0.02), name="W_t3")
         b_t3 = tf.Variable(initial_value=tf.constant(0.0, shape=[21]), name="b_t3")
         conv_t3 = vgg16_object.conv2d_transpose_strided(fuse_2, W_t3, b_t3, output_shape=deconv_shape3, stride=8)
 
@@ -117,8 +121,10 @@ def main(argv=None):
     pred_annotation, logits = inference(image, keep_probability)
     tf.summary.image("input_image", image, max_outputs=20)
     # tf.summary.image("ground_truth", tf.cast(annotation, tf.uint8), max_outputs=20)
-    # tf.summary.image("pred_annotation", tf.cast(pred_annotation, tf.uint8), max_outputs=20)
-    loss = tf.reduce_mean((tf.nn.sparse_softmax_cross_entropy_with_logits(logits=tf.clip_by_value(tf.cast(logits, dtype=tf.float32), 1e-10, 1), labels=tf.cast(annotation, dtype=tf.int32))))
+    tf.summary.image("pred_annotation", tf.cast(pred_annotation, tf.uint8), max_outputs=20)
+    annotation_onehot = tf.one_hot(annotation, 21, 1.0, 0.0, -1)
+    loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels = annotation_onehot, logits = logits))
+    # loss = tf.reduce_mean((tf.nn.sparse_softmax_cross_entropy_with_logits(logits=tf.clip_by_value(tf.cast(logits, dtype=tf.float32), 1e-10, 1), labels=tf.cast(annotation, dtype=tf.int32))))
     tf.summary.scalar("entropy", loss)
 
     trainable_var = tf.trainable_variables()
@@ -144,8 +150,8 @@ def main(argv=None):
     image_options = {'resize': False, 'resize_size': IMAGE_SIZE}
     if FLAGS.mode == 'train':
         train_dataset_reader = dataset.BatchDatasetReader(train_records, image_options, FLAGS.data_dir)
-    validation_dataset_reader = dataset.BatchDatasetReader(valid_records, image_options, FLAGS.data_dir)
-    
+        validation_dataset_reader = dataset.BatchDatasetReader(valid_records, image_options, FLAGS.data_dir)
+
     tf_config = tf.ConfigProto()
     tf_config.gpu_options.per_process_gpu_memory_fraction = 0.6
     sess = tf.Session(config=tf_config)
@@ -179,12 +185,9 @@ def main(argv=None):
                                                        keep_probability: 1.0})
                 pred = sess.run(pred_annotation, feed_dict={image: valid_images, annotation: valid_annotations,
                                                     keep_probability: 1.0})
-                accurate_mtx = tf.equal(pred, valid_annotations)
-                accurate = tf.reduce_sum(tf.cast(accurate_mtx, dtype=tf.float32))/(IMAGE_SIZE*IMAGE_SIZE*valid_images.shape[0])
-                #accurate, _ = tf.metrics.accuracy(labels=valid_annotations, predictions=pred)
-                print(sess.run(accurate))
+                # accurate
+                pass
                 print("%s ---> Validation_loss: %g" % (datetime.datetime.now(), valid_loss))
-                print("%s ---> accurate %g" % (datetime.datetime.now(), sess.run(accurate)))
                 saver.save(sess, FLAGS.logs_dir + "model.ckpt", itr)
 
     elif FLAGS.mode == "visualize":
@@ -193,20 +196,26 @@ def main(argv=None):
                                                     keep_probability: 1.0})
         # pred = np.squeeze(pred, axis=3)
 
-        for itr in range(FLAGS.batch_size):
-            pal = (Image.open('/home/jingyang/Desktop/fcn/fcn_test/dataset/SegmentationClass_tranformed/2007_000032.png')).getpalette()
-            new_img = Image.fromarray(valid_annotations[itr], mode="P")
-            new_img.putpalette(pal)
-            path = "logs/gt_"+ str(5 + itr)+".png"
-            new_img.save(path)
-            utils.save_image(valid_images[itr].astype(np.uint8), FLAGS.logs_dir, name="inp_" + str(5 + itr))
-            #utils.save_image(valid_annotations[itr].astype(np.uint8), FLAGS.logs_dir, name="gt_" + str(5 + itr))
-            new_img = Image.fromarray(pred[itr], mode="P")
-            new_img.putpalette(pal)
-            path = "logs/pred_"+ str(5 + itr)+".png"
-            new_img.save(path)
-            # utils.save_image(pred[itr].astype(np.uint8), FLAGS.logs_dir, name="pred_" + str(5 + itr))
-            print("Saved image: %d" % itr)
+        # save the prediction
+        pass
+        # for itr in range(FLAGS.batch_size):
+        #     # save gt
+        #     pal = (Image.open('/home/jingyang/Desktop/fcn/fcn_test/dataset/SegmentationClass_tranformed/2007_000032.png')).getpalette()
+        #     new_img = Image.fromarray(valid_annotations[itr], mode="P")
+        #     new_img.putpalette(pal)
+        #     path = "logs/gt_"+ str(5 + itr)+".png"
+        #     new_img.save(path)
+        #     # save inp
+        #     utils.save_image(valid_images[itr].astype(np.uint8), FLAGS.logs_dir, name="inp_" + str(5 + itr))
+        #     #utils.save_image(valid_annotations[itr].astype(np.uint8), FLAGS.logs_dir, name="gt_" + str(5 + itr))
+        #     # save pred
+        #     new_img = Image.fromarray(pred[itr], mode="P")
+        #     new_img.putpalette(pal)
+        #     path = "logs/pred_"+ str(5 + itr)+".png"
+        #     new_img.save(path)
+        #     # utils.save_image(pred[itr].astype(np.uint8), FLAGS.logs_dir, name="pred_" + str(5 + itr))
+        #     print("Saved image: %d" % itr)
+
 
 if __name__ == "__main__":
     tf.app.run()
