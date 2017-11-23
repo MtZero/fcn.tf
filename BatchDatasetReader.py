@@ -50,6 +50,7 @@ class BatchDatasetReader:
             self.batch_offset = batch_size
         end = self.batch_offset
         self._read_images(self.perm[start:end])
+        print(self.images.shape)
         return self.images, self.annotations
 
     def _read_images(self, read_batch_list):
@@ -80,6 +81,7 @@ class BatchDatasetReader:
                 self._save_img(filename.replace(origin, transformed), filetype)
             else:
                 img_transformed = np.array(Image.open(filename.replace(origin, transformed)))
+                img_transformed = np.array([img_transformed], dtype=np.uint8)
                 if filetype == "images":
                     self.images = np.append(self.images, img_transformed, axis=0) if self.images != [] else img_transformed
                 elif filetype == "annotations":
@@ -114,9 +116,10 @@ class BatchDatasetReader:
             resize_image = image
             
         if len(image.shape) == 2:
-            resize_image %= 234
-        self.count += 1
-        print('complete', self.count, ":", image_name)
+            resize_image[resize_image == 255] = 21
+        else:
+            self.count += 1
+            print('complete', self.count, ":", image_name)
         return np.array(np.array([resize_image]), dtype=np.uint8)
         
     def _save_img(self, filename, filetype):
