@@ -1,12 +1,7 @@
-"""
-Code ideas from https://github.com/Newmu/dcgan and tensorflow mnist dataset reader
-"""
-import tensorflow as tf
 import numpy as np
 import scipy.misc as misc
 from PIL import Image
 import os, sys
-
 
 class BatchDatasetReader:
     files = []
@@ -30,125 +25,118 @@ class BatchDatasetReader:
         print("Initializing Batch Dataset Reader...")
         print(image_options)
         self.files = records_list
+        self.train_dataset_size = len(self.files['images'])
+        self.perm = np.arange(self.train_dataset_size)
         self.data_dir = data_dir
         self.image_options = image_options
-        self.images_filename = "JPEGImages_tranformed"
-        self.annotations_filename = "SegmentationClass_tranformed"
         self.count = 0
-        self._read_images()
+        exp_annotation = 'dataset/SegmentationClass/2007_000032.png'
+        # 获取颜色表
+        self.pal = (Image.open(exp_annotation)).getpalette()
+        
+    def read_next_batch(self, batch_size):
+        self._clear_memory()
+        # make file
+        start = self.batch_offset
+        self.batch_offset += batch_size
+        if self.batch_offset > self.train_dataset_size:
+            # Finished epoch
+            self.epochs_completed += 1
+            print("****************** Epochs completed: " + str(self.epochs_completed) + "******************")
+            # Shuffle the data
+            np.random.shuffle(self.perm)
+            # Start next epoch
+            start = 0
+            self.batch_offset = batch_size
+        end = self.batch_offset
+        self._read_images(self.perm[start:end])
+        return self.images, self.annotations
+
+    def _read_images(self, read_batch_list):
+        images_filepath = os.path.join(self.data_dir, "JPEGImages_tranformed")
+        annotations_filepath = os.path.join(self.data_dir, "SegmentationClass_tranformed")
+        self._preprocess(images_filepath, 'images', read_batch_list)
+        self._preprocess(annotations_filepath, 'annotations', read_batch_list)
         
 
-    def _read_images(self):
-        self.__channels = True
-        images_filepath = os.path.join(self.data_dir, self.images_filename)
-        annotations_filepath = os.path.join(self.data_dir, self.annotations_filename)
-        self.preprocess(images_filepath, "images")
-        self.__channels = False
-        self.preprocess(annotations_filepath, "annotations")
-        print(self.images.shape)
-        print(self.annotations.shape)
+    def _preprocess(self, filepath, filetype, read_batch_list):
+        if not os.path.exists(filepath):
+            os.makedirs(filepath)
+        origin = "JPEGImages" if filetype == "images" else "SegmentationClass"
+        transformed = "JPEGImages_tranformed" if filetype == "images" else "SegmentationClass_tranformed"
+        print(len(self.files[filetype]))
+        img_list = np.array(self.files[filetype])[read_batch_list]
+        for filename in img_list:
+            img_transformed = ''
+            if not os.path.exists(filename.replace(origin, transformed)):
+                img_transformed = self._transform(filename)
+                # save to memory
+                if filetype == "images":
+                    self.images = np.append(self.images, img_transformed, axis=0) if self.images != [] else img_transformed
+                    print(self.images.shape)
+                elif filetype == "annotations":
+                    self.annotations = np.append(self.annotations, img_transformed, axis=0) if self.annotations != [] else img_transformed
+                # save to local
+                self._save_img(filename.replace(origin, transformed), filetype)
+            else:
+                img_transformed = np.array(Image.open(filename.replace(origin, transformed)))
+                if filetype == "images":
+                    self.images = np.append(self.images, img_transformed, axis=0) if self.images != [] else img_transformed
+                elif filetype == "annotations":
+                    self.annotations = np.append(self.annotations, img_transformed, axis=0) if self.annotations != [] else img_transformed
+            
+        
 
     def _transform(self, filename):
         image = np.array(Image.open(filename))
+        image_name = filename.split('/')[2]
         img_h, img_w = image.shape[0], image.shape[1]
 
-        # ensure that the pictures and the annotations have the same dimensions
-        if self.__channels and len(image.shape) < 3:  # make sure images are of shape(h,w,3)
-            image = np.array([image for i in range(3)])
-            # 转置维度
-            image = image.transpose([1, 2, 0])
-
+        # scale to 500xN
+        if img_h != 500 and img_w != 500:
+            img_h = 500 if img_h > img_w else int(500/img_w*img_h)
+            img_w = 500 if img_h <= img_w else int(500/img_h*img_w)
+            resize_size = int(self.image_options["resize_size"])
+            resize_image = misc.imresize(image,
+                                         [img_h, img_w], interp='bilinear')
         # fill the image to 500x500
+        resize_image = []
         if img_h < 500 or img_w < 500:
-            img_fill = np.zeros([500, 500, 3], 'uint8') if len(image.shape) == 3 else np.zeros([500, 500], 'uint8')
-            
+            img_fill = np.zeros([500, 500, 3], dtype=np.uint8) if len(image.shape) == 3 else np.ones([500, 500], dtype=np.uint8)*255
             img_h_fill = (500 - img_h) // 2
             img_w_fill = (500 - img_w) // 2
             for idx_i, i in enumerate(image):
                 for idx_j, j in enumerate(i):
                     img_fill[idx_i + img_h_fill][idx_j + img_w_fill] = j
-            image = img_fill
+            resize_image = img_fill
             del img_fill
-
-        if self.image_options.get("resize", False) and self.image_options["resize"]:
-            resize_size = int(self.image_options["resize_size"])
-            resize_image = misc.imresize(image,
-                                         [resize_size, resize_size], interp='bilinear')
         else:
             resize_image = image
-        
-        if len(image.shape) == 2:
-            a = tf.constant(250, shape=[500,500], dtype=tf.uint8)
-            less_than_255 = tf.cast(tf.less(image, a), dtype=tf.uint8)
-            resize_image = tf.cast(less_than_255 * image, dtype=tf.uint8)
-            sess = tf.Session()
-            resize_image = resize_image.eval(session=sess)
-        self.count+=1
-        print(self.count)
-        return np.array(resize_image)
-
-    def preprocess(self, filepath, filetype):
-        if not os.path.exists(filepath):
-            os.makedirs(filepath)
-            if filetype == "images":
-                self.images = np.array([self._transform(filename) for filename in self.files[filetype]])
-            else:
-                self.annotations = np.array([self._transform(filename) for filename in self.files[filetype]])
-            self.save_records(filetype)
-        else:
-            origin = "JPEGImages" if filetype == "images" else "SegmentationClass"
-            transformed = self.images_filename if filetype == "images" else self.annotations_filename
-            if filetype == "images":
-                self.images = np.array([np.array(Image.open(filename.replace(origin, transformed))) for filename in self.files[filetype]])
-            else:
-                self.annotations = np.array([np.array(Image.open(filename.replace(origin, transformed))) for filename in self.files[filetype]])
             
-    def save_records(self, filetype):
-        i = 0
-        origin = "JPEGImages" if filetype == "images" else "SegmentationClass"
-        transformed = self.images_filename if filetype == "images" else self.annotations_filename
-        for filename in self.files[filetype]:
-            if filetype == "images":
-                new_img = Image.fromarray(self.images[i])
-                new_img.save(filename.replace(origin, transformed))
-                # print("[COMPLETE] ", i , filename.replace(origin, transformed))
-            else:
-                # 获取颜色表
-                pal = (Image.open(filename)).getpalette()
-                print(self.annotations.shape)
-                new_img = Image.fromarray(self.annotations[i], mode="P")
-                # 设置颜色表
-                new_img.putpalette(pal)
-                new_img.save(filename.replace(origin, transformed))
-                # print("[COMPLETE] ", i , filename.replace(origin, transformed))
-            i += 1
-
-
-    def get_records(self):
-        return self.images, self.annotations
-
-    def reset_batch_offset(self, offset=0):
-        self.batch_offset = offset
-
-    def next_batch(self, batch_size):
-        start = self.batch_offset
-        self.batch_offset += batch_size
-        if self.batch_offset > self.images.shape[0]:
-            # Finished epoch
-            self.epochs_completed += 1
-            print("****************** Epochs completed: " + str(self.epochs_completed) + "******************")
-            # Shuffle the data
-            perm = np.arange(self.images.shape[0])
-            np.random.shuffle(perm)
-            self.images = self.images[perm]
-            self.annotations = self.annotations[perm]
-            # Start next epoch
-            start = 0
-            self.batch_offset = batch_size
-
-        end = self.batch_offset
-        return self.images[start:end], self.annotations[start:end]
+        if len(image.shape) == 2:
+            resize_image %= 234
+        self.count += 1
+        print('complete', self.count, ":", image_name)
+        return np.array(np.array([resize_image]), dtype=np.uint8)
+        
+    def _save_img(self, filename, filetype):
+        if filetype == "images":
+            new_img = Image.fromarray(self.images[-1])
+        else:
+            new_img = Image.fromarray(self.annotations[-1], mode="P")
+            # 设置颜色表
+            new_img.putpalette(self.pal)
+        new_img.save(filename)
 
     def get_random_batch(self, batch_size):
-        indexes = np.random.randint(0, self.images.shape[0], size=[batch_size]).tolist()
-        return self.images[indexes], self.annotations[indexes]
+        batch_list = np.random.randint(0, self.train_dataset_size, size=[batch_size]).tolist()
+        self._read_images(batch_list)
+        return self.images, self.annotations
+
+    def _clear_memory(self):
+        if self.images != []:
+            del self.images
+        if self.annotations != []:
+            del self.annotations
+        self.images = []
+        self.annotations = []
