@@ -98,8 +98,7 @@ def inference(image, keep_prob):
         conv_t3 = vgg16_object.conv2d_transpose_strided(fuse_2, W_t3, b_t3, output_shape=deconv_shape3, stride=8)
 
         prediction = tf.argmax(conv_t3, dimension=3, name="prediction")
-
-        return prediction, conv_t3
+        return prediction, conv_t3, pool4
 
 
 def train(loss_val, var_list):
@@ -118,10 +117,11 @@ def main(argv=None):
     annotation = tf.placeholder(tf.int32, shape=[None, IMAGE_SIZE, IMAGE_SIZE], name="annotation")
 
     # TODO
-    pred_annotation, logits = inference(image, keep_probability)
+    pred_annotation, logits, c_l_l = inference(image, keep_probability)
+    
     tf.summary.image("input_image", image, max_outputs=20)
     # tf.summary.image("ground_truth", tf.cast(annotation, tf.uint8), max_outputs=20)
-    tf.summary.image("pred_annotation", tf.cast(pred_annotation, tf.uint8), max_outputs=20)
+    # tf.summary.image("pred_annotation", tf.cast(pred_annotation, tf.uint8), max_outputs=20)
     annotation_onehot = tf.one_hot(annotation, 21, 1.0, 0.0, -1)
     loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels = annotation_onehot, logits = logits))
     # loss = tf.reduce_mean((tf.nn.sparse_softmax_cross_entropy_with_logits(logits=tf.clip_by_value(tf.cast(logits, dtype=tf.float32), 1e-10, 1), labels=tf.cast(annotation, dtype=tf.int32))))
@@ -151,16 +151,17 @@ def main(argv=None):
     if FLAGS.mode == 'train':
         train_dataset_reader = dataset.BatchDatasetReader(train_records, image_options, FLAGS.data_dir)
         validation_dataset_reader = dataset.BatchDatasetReader(valid_records, image_options, FLAGS.data_dir)
-
+    
     tf_config = tf.ConfigProto()
-    tf_config.gpu_options.per_process_gpu_memory_fraction = 0.6
+    tf_config.gpu_options.per_process_gpu_memory_fraction = 0.7
     sess = tf.Session(config=tf_config)
-
+    
     print("Setting up Saver...")
     saver = tf.train.Saver()
     summary_writer = tf.summary.FileWriter(FLAGS.logs_dir, sess.graph)
 
     sess.run(tf.initialize_all_variables())
+    # print(sess.run(tf.trainable_variables()))
     
     ckpt = tf.train.get_checkpoint_state(FLAGS.logs_dir)
     if ckpt and ckpt.model_checkpoint_path:
@@ -173,7 +174,7 @@ def main(argv=None):
             feed_dict = {image: train_images, annotation: train_annotations, keep_probability: 0.85}
 
             sess.run(train_op, feed_dict=feed_dict)
-
+            print(sess.run(c_l_l, feed_dict=feed_dict))
             if itr % 10 == 0:
                 train_loss, summary_str = sess.run([loss, summary_op], feed_dict=feed_dict)
                 print("Step: %d, Train_loss:%g" % (itr, train_loss))
@@ -183,8 +184,8 @@ def main(argv=None):
                 valid_images, valid_annotations = validation_dataset_reader.read_next_batch(FLAGS.batch_size)
                 valid_loss = sess.run(loss, feed_dict={image: valid_images, annotation: valid_annotations,
                                                        keep_probability: 1.0})
-                pred = sess.run(pred_annotation, feed_dict={image: valid_images, annotation: valid_annotations,
-                                                    keep_probability: 1.0})
+                # pred = sess.run(pred_annotation, feed_dict={image: valid_images, annotation: valid_annotations,
+                #                                     keep_probability: 1.0})
                 # accurate
                 pass
                 print("%s ---> Validation_loss: %g" % (datetime.datetime.now(), valid_loss))
@@ -192,8 +193,8 @@ def main(argv=None):
 
     elif FLAGS.mode == "visualize":
         valid_images, valid_annotations = validation_dataset_reader.get_random_batch(FLAGS.batch_size)
-        pred = sess.run(pred_annotation, feed_dict={image: valid_images, annotation: valid_annotations,
-                                                    keep_probability: 1.0})
+        # pred = sess.run(pred_annotation, feed_dict={image: valid_images, annotation: valid_annotations,
+        #                                             keep_probability: 1.0})
         # pred = np.squeeze(pred, axis=3)
 
         # save the prediction
