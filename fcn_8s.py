@@ -14,7 +14,7 @@ from six.moves import xrange
 from PIL import Image
 
 FLAGS = tf.flags.FLAGS
-tf.flags.DEFINE_integer("batch_size", "20", "batch size for training")
+tf.flags.DEFINE_integer("batch_size", "10", "batch size for training")
 tf.flags.DEFINE_string("logs_dir", "logs/", "path to logs directory")
 tf.flags.DEFINE_string("data_dir", "dataset/", "path to dataset")
 tf.flags.DEFINE_float("learning_rate", "1e-4", "Learning rate for Momentum Optimizer")
@@ -81,12 +81,6 @@ def inference(image, keep_prob):
         b_t1 = tf.Variable(initial_value=tf.constant(0.0, shape=[21]), name="b_t1")
         conv_t1 = vgg16_object.conv2d_transpose_strided(fc8, W_t1, b_t1, output_shape=tf.shape(score1))
         fuse_1 = tf.add(conv_t1, score1, name="fuse_1")
-        # deconv_shape1 = pool4.get_shape()
-        # W_t1 = tf.Variable(initial_value=tf.truncated_normal([4, 4, deconv_shape1[3].value, 21], 0.02), name="W_t1")
-        # b_t1 = tf.Variable(initial_value=tf.constant(0.0, shape=[deconv_shape1[3].value]), name="b_t1")
-        # conv_t1 = vgg16_object.conv2d_transpose_strided(fc8, W_t1, b_t1, output_shape=tf.shape(pool4))
-        # fuse_1 = tf.add(conv_t1, pool4, name="fuse_1")
-
 
         # upsample and add with pool3(pool3 should pass through a score layer)
         score_w2 = utils.weight_variable([1,1,256,21], name="score_w2")
@@ -96,11 +90,6 @@ def inference(image, keep_prob):
         b_t2 = tf.Variable(initial_value=tf.constant(0.0, shape=[21]), name="b_t2")
         conv_t2 = vgg16_object.conv2d_transpose_strided(fuse_1, W_t2, b_t2, output_shape=tf.shape(score2))
         fuse_2 = tf.add(conv_t2, score2, name="fuse_2")
-        # deconv_shape2 = pool3.get_shape()
-        # W_t2 = tf.Variable(initial_value=tf.truncated_normal([4, 4, deconv_shape2[3].value, deconv_shape1[3].value], 0.02), name="W_t2")
-        # b_t2 = tf.Variable(initial_value=tf.constant(0.0, shape=[deconv_shape2[3].value]), name="b_t2")
-        # conv_t2 = vgg16_object.conv2d_transpose_strided(fuse_1, W_t2, b_t2, output_shape=tf.shape(pool3))
-        # fuse_2 = tf.add(conv_t2, pool3, name="fuse_2")
 
         shape = tf.shape(processed_image)
         deconv_shape3 = tf.stack([shape[0], shape[1], shape[2], 21])
@@ -110,7 +99,7 @@ def inference(image, keep_prob):
 
         prediction = tf.argmax(conv_t3, dimension=3, name="prediction")
 
-        return tf.expand_dims(prediction, dim=3), conv_t3
+        return prediction, conv_t3
 
 
 def train(loss_val, var_list):
@@ -144,7 +133,7 @@ def main(argv=None):
             utils.add_to_regularization_and_summary(var)
         # reg_loss = tf.add_n(tf.get_collection("reg_loss"))
         reg_loss = tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables()])
-        # loss += FLAGS.weight_decay * reg_loss
+        loss += FLAGS.weight_decay * reg_loss
     
 
     train_op = train(loss, trainable_var)
@@ -163,7 +152,9 @@ def main(argv=None):
         train_dataset_reader = dataset.BatchDatasetReader(train_records, image_options, FLAGS.data_dir)
         validation_dataset_reader = dataset.BatchDatasetReader(valid_records, image_options, FLAGS.data_dir)
 
-    sess = tf.Session()
+    tf_config = tf.ConfigProto()
+    tf_config.gpu_options.per_process_gpu_memory_fraction = 0.6
+    sess = tf.Session(config=tf_config)
 
     print("Setting up Saver...")
     saver = tf.train.Saver()
@@ -178,7 +169,7 @@ def main(argv=None):
     
     if FLAGS.mode == "train":
         for itr in xrange(MAX_ITERATION):
-            train_images, train_annotations = train_dataset_reader.next_batch(FLAGS.batch_size)
+            train_images, train_annotations = train_dataset_reader.read_next_batch(FLAGS.batch_size)
             feed_dict = {image: train_images, annotation: train_annotations, keep_probability: 0.85}
 
             sess.run(train_op, feed_dict=feed_dict)
@@ -189,9 +180,13 @@ def main(argv=None):
                 summary_writer.add_summary(summary_str, itr)
 
             if itr % 500 == 0:
-                valid_images, valid_annotations = validation_dataset_reader.next_batch(FLAGS.batch_size)
+                valid_images, valid_annotations = validation_dataset_reader.read_next_batch(FLAGS.batch_size)
                 valid_loss = sess.run(loss, feed_dict={image: valid_images, annotation: valid_annotations,
                                                        keep_probability: 1.0})
+                pred = sess.run(pred_annotation, feed_dict={image: valid_images, annotation: valid_annotations,
+                                                    keep_probability: 1.0})
+                # accurate
+                pass
                 print("%s ---> Validation_loss: %g" % (datetime.datetime.now(), valid_loss))
                 saver.save(sess, FLAGS.logs_dir + "model.ckpt", itr)
 
@@ -199,25 +194,27 @@ def main(argv=None):
         valid_images, valid_annotations = validation_dataset_reader.get_random_batch(FLAGS.batch_size)
         pred = sess.run(pred_annotation, feed_dict={image: valid_images, annotation: valid_annotations,
                                                     keep_probability: 1.0})
-        pred = np.squeeze(pred, axis=3)
+        # pred = np.squeeze(pred, axis=3)
 
-        for itr in range(FLAGS.batch_size):
-            # save gt
-            pal = (Image.open('/home/jingyang/Desktop/fcn/fcn_test/dataset/SegmentationClass_tranformed/2007_000032.png')).getpalette()
-            new_img = Image.fromarray(valid_annotations[itr], mode="P")
-            new_img.putpalette(pal)
-            path = "logs/gt_"+ str(5 + itr)+".png"
-            new_img.save(path)
-            # save inp
-            utils.save_image(valid_images[itr].astype(np.uint8), FLAGS.logs_dir, name="inp_" + str(5 + itr))
-            #utils.save_image(valid_annotations[itr].astype(np.uint8), FLAGS.logs_dir, name="gt_" + str(5 + itr))
-            # save pred
-            new_img = Image.fromarray(pred[itr], mode="P")
-            new_img.putpalette(pal)
-            path = "logs/pred_"+ str(5 + itr)+".png"
-            new_img.save(path)
-            # utils.save_image(pred[itr].astype(np.uint8), FLAGS.logs_dir, name="pred_" + str(5 + itr))
-            print("Saved image: %d" % itr)
+        # save the prediction
+        pass
+        # for itr in range(FLAGS.batch_size):
+        #     # save gt
+        #     pal = (Image.open('/home/jingyang/Desktop/fcn/fcn_test/dataset/SegmentationClass_tranformed/2007_000032.png')).getpalette()
+        #     new_img = Image.fromarray(valid_annotations[itr], mode="P")
+        #     new_img.putpalette(pal)
+        #     path = "logs/gt_"+ str(5 + itr)+".png"
+        #     new_img.save(path)
+        #     # save inp
+        #     utils.save_image(valid_images[itr].astype(np.uint8), FLAGS.logs_dir, name="inp_" + str(5 + itr))
+        #     #utils.save_image(valid_annotations[itr].astype(np.uint8), FLAGS.logs_dir, name="gt_" + str(5 + itr))
+        #     # save pred
+        #     new_img = Image.fromarray(pred[itr], mode="P")
+        #     new_img.putpalette(pal)
+        #     path = "logs/pred_"+ str(5 + itr)+".png"
+        #     new_img.save(path)
+        #     # utils.save_image(pred[itr].astype(np.uint8), FLAGS.logs_dir, name="pred_" + str(5 + itr))
+        #     print("Saved image: %d" % itr)
 
 
 if __name__ == "__main__":
