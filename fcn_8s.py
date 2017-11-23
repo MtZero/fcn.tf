@@ -14,10 +14,10 @@ from six.moves import xrange
 from PIL import Image
 
 FLAGS = tf.flags.FLAGS
-tf.flags.DEFINE_integer("batch_size", "10", "batch size for training")
+tf.flags.DEFINE_integer("batch_size", "20", "batch size for training")
 tf.flags.DEFINE_string("logs_dir", "logs/", "path to logs directory")
 tf.flags.DEFINE_string("data_dir", "dataset/", "path to dataset")
-tf.flags.DEFINE_float("learning_rate", "1e-3", "Learning rate for Momentum Optimizer")
+tf.flags.DEFINE_float("learning_rate", "1e-4", "Learning rate for Momentum Optimizer")
 tf.flags.DEFINE_bool('debug', "False", "Debug mode: True/ False")
 tf.flags.DEFINE_string("model_dir", "Model_zoo/", "Path to vgg model mat")
 tf.flags.DEFINE_string('mode', "train", "Mode train/ test/ visualize")
@@ -33,7 +33,7 @@ MODEL_URL = "http://www.vlfeat.org/matconvnet/models/beta16/imagenet-vgg-verydee
 def inference(image, keep_prob):
     """ fcn_8s """
     # load data
-    vgg16_object= vgg16()
+    vgg16_object = vgg16()
     print("setting up vgg initialized conv layers ...")
     model_data = utils.get_model_data(FLAGS.model_dir, MODEL_URL)
     mean = model_data['normalization'][0][0][0]
@@ -104,13 +104,13 @@ def inference(image, keep_prob):
 
         shape = tf.shape(processed_image)
         deconv_shape3 = tf.stack([shape[0], shape[1], shape[2], 21])
-        W_t3 = tf.Variable(initial_value=tf.truncated_normal([16, 16, 21, deconv_shape2[3].value], 0.02), name="W_t3")
+        W_t3 = tf.Variable(initial_value=tf.truncated_normal([16, 16, 21, 21], 0.02), name="W_t3")
         b_t3 = tf.Variable(initial_value=tf.constant(0.0, shape=[21]), name="b_t3")
         conv_t3 = vgg16_object.conv2d_transpose_strided(fuse_2, W_t3, b_t3, output_shape=deconv_shape3, stride=8)
 
         prediction = tf.argmax(conv_t3, dimension=3, name="prediction")
 
-        return prediction, conv_t3
+        return tf.expand_dims(prediction, dim=3), conv_t3
 
 
 def train(loss_val, var_list):
@@ -132,8 +132,10 @@ def main(argv=None):
     pred_annotation, logits = inference(image, keep_probability)
     tf.summary.image("input_image", image, max_outputs=20)
     # tf.summary.image("ground_truth", tf.cast(annotation, tf.uint8), max_outputs=20)
-    # tf.summary.image("pred_annotation", tf.cast(pred_annotation, tf.uint8), max_outputs=20)
-    loss = tf.reduce_mean((tf.nn.sparse_softmax_cross_entropy_with_logits(logits=tf.clip_by_value(tf.cast(logits, dtype=tf.float32), 1e-10, 1), labels=tf.cast(annotation, dtype=tf.int32))))
+    tf.summary.image("pred_annotation", tf.cast(pred_annotation, tf.uint8), max_outputs=20)
+    annotation_onehot = tf.one_hot(annotation, 21, 1.0, 0.0, -1)
+    loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels = annotation_onehot, logits = logits))
+    # loss = tf.reduce_mean((tf.nn.sparse_softmax_cross_entropy_with_logits(logits=tf.clip_by_value(tf.cast(logits, dtype=tf.float32), 1e-10, 1), labels=tf.cast(annotation, dtype=tf.int32))))
     tf.summary.scalar("entropy", loss)
 
     trainable_var = tf.trainable_variables()
@@ -142,7 +144,7 @@ def main(argv=None):
             utils.add_to_regularization_and_summary(var)
         # reg_loss = tf.add_n(tf.get_collection("reg_loss"))
         reg_loss = tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables()])
-        loss += FLAGS.weight_decay * reg_loss
+        # loss += FLAGS.weight_decay * reg_loss
     
 
     train_op = train(loss, trainable_var)
@@ -159,11 +161,9 @@ def main(argv=None):
     image_options = {'resize': False, 'resize_size': IMAGE_SIZE}
     if FLAGS.mode == 'train':
         train_dataset_reader = dataset.BatchDatasetReader(train_records, image_options, FLAGS.data_dir)
-    validation_dataset_reader = dataset.BatchDatasetReader(valid_records, image_options, FLAGS.data_dir)
-    
-    tf_config = tf.ConfigProto()
-    tf_config.gpu_options.per_process_gpu_memory_fraction = 0.6
-    sess = tf.Session(config=tf_config)
+        validation_dataset_reader = dataset.BatchDatasetReader(valid_records, image_options, FLAGS.data_dir)
+
+    sess = tf.Session()
 
     print("Setting up Saver...")
     saver = tf.train.Saver()
@@ -178,7 +178,7 @@ def main(argv=None):
     
     if FLAGS.mode == "train":
         for itr in xrange(MAX_ITERATION):
-            train_images, train_annotations = train_dataset_reader.read_next_batch(FLAGS.batch_size)
+            train_images, train_annotations = train_dataset_reader.next_batch(FLAGS.batch_size)
             feed_dict = {image: train_images, annotation: train_annotations, keep_probability: 0.85}
 
             sess.run(train_op, feed_dict=feed_dict)
@@ -189,39 +189,36 @@ def main(argv=None):
                 summary_writer.add_summary(summary_str, itr)
 
             if itr % 500 == 0:
-                valid_images, valid_annotations = validation_dataset_reader.read_next_batch(FLAGS.batch_size)
+                valid_images, valid_annotations = validation_dataset_reader.next_batch(FLAGS.batch_size)
                 valid_loss = sess.run(loss, feed_dict={image: valid_images, annotation: valid_annotations,
                                                        keep_probability: 1.0})
-                pred = sess.run(pred_annotation, feed_dict={image: valid_images, annotation: valid_annotations,
-                                                    keep_probability: 1.0})
-                accurate_mtx = tf.equal(pred, valid_annotations)
-                accurate = tf.reduce_sum(tf.cast(accurate_mtx, dtype=tf.float32))/(IMAGE_SIZE*IMAGE_SIZE*valid_images.shape[0])
-                #accurate, _ = tf.metrics.accuracy(labels=valid_annotations, predictions=pred)
-                print(sess.run(accurate))
                 print("%s ---> Validation_loss: %g" % (datetime.datetime.now(), valid_loss))
-                print("%s ---> accurate %g" % (datetime.datetime.now(), sess.run(accurate)))
                 saver.save(sess, FLAGS.logs_dir + "model.ckpt", itr)
 
     elif FLAGS.mode == "visualize":
         valid_images, valid_annotations = validation_dataset_reader.get_random_batch(FLAGS.batch_size)
         pred = sess.run(pred_annotation, feed_dict={image: valid_images, annotation: valid_annotations,
                                                     keep_probability: 1.0})
-        # pred = np.squeeze(pred, axis=3)
+        pred = np.squeeze(pred, axis=3)
 
         for itr in range(FLAGS.batch_size):
+            # save gt
             pal = (Image.open('/home/jingyang/Desktop/fcn/fcn_test/dataset/SegmentationClass_tranformed/2007_000032.png')).getpalette()
             new_img = Image.fromarray(valid_annotations[itr], mode="P")
             new_img.putpalette(pal)
             path = "logs/gt_"+ str(5 + itr)+".png"
             new_img.save(path)
+            # save inp
             utils.save_image(valid_images[itr].astype(np.uint8), FLAGS.logs_dir, name="inp_" + str(5 + itr))
             #utils.save_image(valid_annotations[itr].astype(np.uint8), FLAGS.logs_dir, name="gt_" + str(5 + itr))
+            # save pred
             new_img = Image.fromarray(pred[itr], mode="P")
             new_img.putpalette(pal)
             path = "logs/pred_"+ str(5 + itr)+".png"
             new_img.save(path)
             # utils.save_image(pred[itr].astype(np.uint8), FLAGS.logs_dir, name="pred_" + str(5 + itr))
             print("Saved image: %d" % itr)
+
 
 if __name__ == "__main__":
     tf.app.run()
