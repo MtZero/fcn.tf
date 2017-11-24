@@ -11,6 +11,7 @@ import read_voa_data as scene_parsing
 import datetime
 import BatchDatasetReader as dataset
 from six.moves import xrange
+from function import accuracy
 from PIL import Image
 
 FLAGS = tf.flags.FLAGS
@@ -205,10 +206,10 @@ def main(argv=None):
                 valid_images, valid_annotations = validation_dataset_reader.read_next_batch(FLAGS.batch_size)
                 valid_loss = sess.run(loss, feed_dict={image: valid_images, annotation: valid_annotations,
                                                        keep_probability: 1.0})
-                # pred = sess.run(pred_annotation, feed_dict={image: valid_images, annotation: valid_annotations,
-                #                                     keep_probability: 1.0})
-                # accurate
-                pass
+                pred = sess.run(pred_annotation, feed_dict={image: valid_images, annotation: valid_annotations,
+                                keep_probability: 1.0})
+                valid_accu = accuracy.batch_calc_accuracy(pred, valid_annotations)
+                print("%s ---> Validation_accu: %g" % (datetime.datetime.now(), valid_accu))
                 print("%s ---> Validation_loss: %g" % (datetime.datetime.now(), valid_loss))
                 saver.save(sess, FLAGS.logs_dir + "model.ckpt", itr)
 
