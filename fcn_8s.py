@@ -38,7 +38,7 @@ def inference(image, keep_prob):
     model_data = utils.get_model_data(FLAGS.model_dir, MODEL_URL)
     mean = model_data['normalization'][0][0][0]
     mean_pixel = np.mean(mean, axis=(0, 1))
-    weights = np.squeeze(model_data['layers'])
+    weights = model_data['layers'][0]
 
     # preprocess
     processed_image = utils.process_image(image, mean_pixel)
@@ -77,7 +77,7 @@ def inference(image, keep_prob):
         score_w1 = utils.weight_variable([1,1,512,21], name="score_w1")
         score_b1 = utils.weight_variable([21], name="score_b1")
         score1 = vgg16_object._conv(pool4, score_w1, score_b1, 'score1')
-        W_t1 = tf.Variable(initial_value=tf.truncated_normal([4, 4, 21, 21], 0.02), name="W_t1")
+        W_t1 = tf.Variable(initial_value=bilinear_init(), name="W_t1")
         b_t1 = tf.Variable(initial_value=tf.constant(0.0, shape=[21]), name="b_t1")
         conv_t1 = vgg16_object.conv2d_transpose_strided(fc8, W_t1, b_t1, output_shape=tf.shape(score1))
         fuse_1 = tf.add(conv_t1, score1, name="fuse_1")
@@ -86,19 +86,40 @@ def inference(image, keep_prob):
         score_w2 = utils.weight_variable([1,1,256,21], name="score_w2")
         score_b2 = utils.weight_variable([21], name="score_b2")
         score2 = vgg16_object._conv(pool3, score_w2, score_b2, 'score2')
-        W_t2 = tf.Variable(initial_value=tf.truncated_normal([4, 4, 21, 21], 0.02), name="W_t2")
+        W_t2 = tf.Variable(initial_value=bilinear_init(), name="W_t2")
         b_t2 = tf.Variable(initial_value=tf.constant(0.0, shape=[21]), name="b_t2")
         conv_t2 = vgg16_object.conv2d_transpose_strided(fuse_1, W_t2, b_t2, output_shape=tf.shape(score2))
         fuse_2 = tf.add(conv_t2, score2, name="fuse_2")
 
         shape = tf.shape(processed_image)
         deconv_shape3 = tf.stack([shape[0], shape[1], shape[2], 21])
-        W_t3 = tf.Variable(initial_value=tf.truncated_normal([16, 16, 21, 21], 0.02), name="W_t3")
+        W_t3 = tf.Variable(initial_value=bilinear_init(scale=8), name="W_t3")
         b_t3 = tf.Variable(initial_value=tf.constant(0.0, shape=[21]), name="b_t3")
         conv_t3 = vgg16_object.conv2d_transpose_strided(fuse_2, W_t3, b_t3, output_shape=deconv_shape3, stride=8)
 
         prediction = tf.argmax(conv_t3, dimension=3, name="prediction")
         return prediction, conv_t3, pool4
+
+#Create bilinear weights in numpy array
+def bilinear_init(scale=2, num_classes=21):
+    filter_size = (2 * scale - scale % 2)
+    bilinear_kernel = np.zeros([filter_size, filter_size], dtype=np.float32)
+    scale_factor = (filter_size + 1) // 2
+    if filter_size % 2 == 1:
+        center = scale_factor - 1
+    else:
+        center = scale_factor - 0.5
+    for x in range(filter_size):
+        for y in range(filter_size):
+            bilinear_kernel[x,y] = (1 - abs(x - center) / scale_factor) * \
+                                   (1 - abs(y - center) / scale_factor)
+    weights = np.zeros((filter_size, filter_size, num_classes, num_classes))
+    for i in range(num_classes):
+        weights[:, :, i, i] = bilinear_kernel
+
+    #assign numpy array to tensor
+    bilinear_initial = tf.convert_to_tensor(weights, dtype=tf.float32)
+    return bilinear_initial
 
 
 def train(loss_val, var_list):
@@ -132,8 +153,8 @@ def main(argv=None):
         for var in trainable_var:
             utils.add_to_regularization_and_summary(var)
         # reg_loss = tf.add_n(tf.get_collection("reg_loss"))
-        reg_loss = tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables()])
-        loss += FLAGS.weight_decay * reg_loss
+    reg_loss = tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables()])
+    loss += FLAGS.weight_decay * reg_loss
     
 
     train_op = train(loss, trainable_var)
