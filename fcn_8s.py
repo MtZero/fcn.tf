@@ -38,7 +38,7 @@ def inference(image, keep_prob):
     model_data = utils.get_model_data(FLAGS.model_dir, MODEL_URL)
     mean = model_data['normalization'][0][0][0]
     mean_pixel = np.mean(mean, axis=(0, 1))
-    weights = np.squeeze(model_data['layers'])
+    weights = model_data['layers'][0]
 
     # preprocess
     processed_image = utils.process_image(image, mean_pixel)
@@ -153,8 +153,8 @@ def main(argv=None):
         for var in trainable_var:
             utils.add_to_regularization_and_summary(var)
         # reg_loss = tf.add_n(tf.get_collection("reg_loss"))
-        reg_loss = tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables()])
-        loss += FLAGS.weight_decay * reg_loss
+    reg_loss = tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables()])
+    loss += FLAGS.weight_decay * reg_loss
     
 
     train_op = train(loss, trainable_var)
