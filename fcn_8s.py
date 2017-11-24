@@ -117,8 +117,8 @@ def bilinear_init(scale=2, num_classes=21):
     for i in range(num_classes):
         weights[:, :, i, i] = bilinear_kernel
 
-    #assign numpy array to constant_initalizer and pass to get_variable
-    bilinear_initial = tf.constant_initializer(value=weights, dtype=tf.float32)
+    #assign numpy array to tensor
+    bilinear_initial = tf.convert_to_tensor(weights, dtype=tf.float32)
     return bilinear_initial
 
 
